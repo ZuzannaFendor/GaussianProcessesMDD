@@ -3,7 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from gpflow.utilities import print_summary
+mu = tf.convert_to_tensor(np.ones((4,2,2,3)))
+Y = tf.convert_to_tensor(np.zeros((2,2)))
+Z = Y - tf.reduce_sum(tf.reduce_mean(mu, axis = 0), axis= -1)
 
+print(Z)
 plt.rcParams["figure.figsize"] = (12, 6)
 print("This is a tutorial ")
 X = np.array([0.1,0.2,0.4,0.45,1.1,1.15,1.6,2.6,2.9,3.1]).reshape(-1, 1)

@@ -1,3 +1,4 @@
+print("importing stuff")
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ from BANNER.src.models.WishartProcess import WishartProcess
 from BANNER.util.training_util import run_adam
 from BANNER.src.kernels.PartlySharedIndependentMOK import PartlySharedIndependentMultiOutput
 from BANNER.src.likelihoods.WishartProcessLikelihood import WishartLikelihood
-
+print("done with imports")
 # mpl.rcParams['pdf.fonttype'] = 42
 # mpl.rcParams['ps.fonttype'] = 42
 # # plt.rc('text', usetex=True)
@@ -123,8 +124,9 @@ def run_wishart_process_inference(data, T, iterations=10000, num_inducing=None, 
     additive_noise = True
 
     nu = D + 1  # Degrees of freedom
+    mnu = 2
     R = 10  # samples for variational expectation
-    latent_dim = int(nu * D)
+    latent_dim = int((nu+mnu) * D)
 
     if num_inducing == N:
         Z_init = tf.identity(X)  # X.copy()
@@ -146,10 +148,10 @@ def run_wishart_process_inference(data, T, iterations=10000, num_inducing=None, 
         raise NotImplementedError
 
     # likelihood
-    likelihood = WishartLikelihood(D, nu, R=R, additive_noise=additive_noise, model_inverse=model_inverse)
+    likelihood = WishartLikelihood(D, nu, mnu = mnu, R=R, additive_noise=additive_noise, model_inverse=model_inverse)
     # create GWP model
 
-    wishart_process = WishartProcess(kernel, likelihood, D=D, nu=nu, inducing_variable=iv)
+    wishart_process = WishartProcess(kernel, likelihood, D=D, nu=nu, mnu =mnu, inducing_variable=iv)
 
     # If num_inducing==N, we do not actually have inducing points.
     if num_inducing == N:
@@ -317,7 +319,7 @@ D, N, T = 3, 100, 4.0
 X, Sigma_true, true_lengthscale, true_variance = simulate_wishart_process(D=D, T=T, N=N)
 Y = sample_observations(Sigma_true)
 
-num_iter = 10000
+num_iter = 500
 gwp_results = run_wishart_process_inference(data=(X, Y), T=T,
                                             iterations=num_iter,
                                             num_inducing=int(0.4*N),
@@ -337,9 +339,8 @@ plot_loss(num_iter, elbo)
 #                                                                                      stride_length=stride_length)
 
 num_samples = 5000
-posterior_wishart_process.predict_f()
 fig, axes = plot_wishart_process_sample(X, Sigma_true)
-samples = posterior_wishart_process.predict_mc(X, num_samples) #(num_samples, N, D, D)
+samples, mu = posterior_wishart_process.predict_mc(X, num_samples) #(num_samples, N, D, D)
 print("the shape of sigma ", samples.shape)
 plot_wishart_predictions(samples=samples, X=X, axes=axes, plot_individuals=5)
 # plot_sliding_window(sliding_window_inv_wishart_mean, sliding_window_inv_wishart_var, axes=axes)
