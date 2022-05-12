@@ -5,8 +5,7 @@ import sklearn
 from sklearn.covariance import GraphicalLassoCV
 import random
 import matplotlib.pyplot as plt
-import gglasso
-from gglasso.problem import glasso_problem
+
 from matplotlib import animation
 
 

@@ -1,55 +1,98 @@
 #imports
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
 
 import Banner
 import AnalysisUtils as AU
 from AnalysisUtils import run_inference_pcg as runpcg
-import numpy as np
-import matplotlib.pyplot as plt
 from AnalysisUtils import plot_pcg as plotpcg
 from AnalysisUtils import data_processing_pcg as dataprpcg
+from AnalysisUtils import metrics
 
-from AnalysisUtils import run_inference_pcg as infer
-D, N, T = 3, 100, 4.0
 
-X = np.linspace(0,T,N) # np.tile(np.linspace(0,T,N), (D, 1)).T
-Y = np.array([np.linspace(0,T,N)+np.random.rand(N),np.ones(N)+np.random.rand(N)*0.2,np.linspace(T,0,N)*np.random.rand(N)])
-Y = Y.T
-print(Y.shape)
+#data characteristics
+# D, N, T = 5, 200, 4.0
 
+#generate data
+
+# X = np.linspace(0,T,N) # np.tile(np.linspace(0,T,N), (D, 1)).T
+# Y = np.array([np.sin(np.linspace(0,T,N))+np.random.rand(N),np.linspace(0,T,N)*0.3+np.random.rand(N),np.linspace(0,T,N)+np.random.rand(N),np.ones(N)+np.random.rand(N)*0.2,np.linspace(T,0,N)*np.random.rand(N)])
+# Y = Y.T
+
+data, colnames = dataprpcg.import_ESMdata()
+X = data['hour_no'] .to_numpy()
+Y = data.loc[:,['mood_down','pat_worry','phy_tired']].to_numpy()
+N, D, T = Y.shape[0],Y.shape[1], np.max(X)
+# plot data in a scatterplot
 # plt.scatter(X, Y[:,0])
 # plt.scatter(X, Y[:,1])
 # plt.scatter(X, Y[:,2])
 # plt.show()
 
-num_iter = 50
+
+num_iter = 5000
 num_samples = 200
-testpoints = np.tile(np.linspace(0, T, N), (D, 1)).T
-print(testpoints.shape)
+N_test = 60
+testpoints = np.linspace(0, T, N_test)
+tiled_testpoints = np.tile(testpoints, (D, 1)).T
+
+
+
+#data = (X,Y) #(np.array([0,1,2,3,4,5,6,7,8])*2,np.array([[2],[5],[8],[4],[8],[10],[11],[20],[21]]))
+
+# models = ["BANNER","MOGP","MGARCH"]
+# var_names = ["sore throat","headache","fever","cough", "runny nose"]
+# for m in models:
+#
+#     labels, predictions = runpcg.cross_validate(m,(X,Y), n_splits = 3, test_s=2, num_iter = 500, num_samples = 200 )
+#     #use only with mgarch!
+#     if m == "MGARCH":
+#         predictions = np.reshape(predictions, (1,predictions.shape[0],predictions.shape[1]))
+#     #use only with mogp
+#     if m == "MOGP":
+#         predictions = runpcg.reformat_data(predictions, D, samples = True)
+#     mse = metrics.MSE(labels, predictions)
+#     plotpcg.plot_mse(mse,var_names,m)
+#     correlation = metrics.correlation(labels, predictions)
+
+
+# LABELS, PREDICTIONS=runpcg.cross_validate("BANNER",(X,Y))
+# #labels, predictions = np.random.random((4,40,5)), np.random.random(size = (4,200,40,5))
+# labels, predictions = np.array(LABELS), np.array(PREDICTIONS)
+# print(f"Lables{labels.shape} and predictions{predictions.shape} ")
+# labels = np.reshape(labels, (4*40,5))
+# predictions = np.reshape(predictions, (200,4*40,5))
+
+# labels = np.random.random((160,5))
+# predictions = np.random.random((40,160,5))
+# print(f"shape after flattening Lables{labels.shape} and predictions{predictions.shape}")
+# mse_mean, mse_var = metrics.MSE(labels,predictions)
+# corr = metrics.correlation(labels, predictions)
+# print("finished")
+# compute mse distribution
+
+
+#### Straight out running and fitting the models ####
+#### using all of the data to provide us with a  ####
+#### model of the depression progression         ####
+
 
 # wishart_model = runpcg.run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
 # posterior_wishart_process = wishart_model['wishart process']
-# sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(testpoints, num_samples)
-# sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(testpoints)
+# sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
+# sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(tiled_testpoints)
+# y_mu_gwp, y_var_gwp = runpcg.sample_y(mu_samples_gwp,sigma_samples_gwp)
+# plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
 
-# y_samples = np.zeros_like(mu_samples_gwp)
-#
-# for s in range(num_samples):
-#     for t in range(int(N)):
-#         y_samples[s,t] = np.random.multivariate_normal(mu_samples_gwp[s,t], sigma_samples_gwp[s,t])
-# mu_y = np.mean(y_samples,axis = 0)
-# var_y = np.var(y_samples, axis = 0 )
-#
-# plotpcg.plot_timeseries(testpoints, mu_y.T, var_y.T, X, Y)
-
-mogp_model = runpcg.run_MOGP(data=(X,Y))[0]
-aug_test_X, _ = dataprpcg.stackify_data(testpoints[0],np.ones((N,D)))
-print(np.array(aug_test_X))
+mogp_model = runpcg.run_MOGP(data=(X,Y), iterations = 10000)[0]
+aug_test_X, _ = dataprpcg.stackify_data(testpoints,np.ones((N_test,D)))
 mu_y,var_y = mogp_model.predict_f(np.array(aug_test_X))
-
-plotpcg.plot_timeseries(testpoints, mu_y.T, var_y.T, X, Y)
+mumu = np.reshape(mu_y,(N_test,D)).T
+vuvu = np.reshape(var_y,(N_test,D)).T
+plotpcg.plot_timeseries(testpoints, mumu, vuvu, X, Y)
 
 
 # mgarch_model= runpcg.run_MGARCH(data=(X,Y))
 # mgarch_covariance = mgarch_model["covariance_matrix"]
 # print("finished", mgarch_covariance)
-

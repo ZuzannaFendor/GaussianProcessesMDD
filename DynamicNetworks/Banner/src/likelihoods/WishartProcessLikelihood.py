@@ -84,9 +84,8 @@ class WishartLikelihood(WishartLikelihoodBase):
             log_det_cov = - log_det_cov
 
         # Compute (Y.T affa^-1 Y) term
-        print("Y", Y)
         y_diff  = Y - tf.reduce_sum(tf.reduce_mean(mu, axis = 0), axis= -1)
-        print("Y diff", y_diff)
+
         if self.model_inverse:
             y_prec = tf.einsum('jk,ijkl->ijl', y_diff, AFFA)  # (R, N, D)  # j=N, k=D, i=, l=
             yt_inv_y = tf.reduce_sum(y_prec * y_diff, axis=2)  # (R, N)

@@ -1,6 +1,5 @@
 from Banner import src
 import tensorflow as tf
-import numpy as np
 import gpflow
 from gpflow.kernels import SquaredExponential, SharedIndependent, SeparateIndependent
 from gpflow.inducing_variables import SharedIndependentInducingVariables, InducingPoints
@@ -18,11 +17,13 @@ import numpy as np
 import pandas as pd
 from rpy2.robjects.conversion import localconverter
 
+from sklearn.model_selection import TimeSeriesSplit
+
 
 def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, learning_rate=0.01, batch_size=25):
     """
     :param data: Tuple (X, Y) of input and responses.
-    :param T: Last timepoint (assume we start at t=0).
+    :param T: Last timepoint of the time series (assume we start at t=0).
     :param mnu: the type of mu definition. (shared, independent or fully_dependent)
     :param iterations: Number of variational inference optimization iterations.
     :param num_inducing: Number of inducing points (inducing points are in the same space as X).
@@ -104,7 +105,7 @@ def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
     X, Y = data
     N, D = Y.shape
     #format the data to include the coregionalization label
-    X, Y = __format_data(X,Y)
+    X, Y = format_data(X, Y)
     # create the sliding window models
     if window_size is None:
         window_size = N
@@ -141,7 +142,6 @@ def __sliding_window(X, Y, D, window_size, stride):
 
     model_windows = []
     for i in range(0, nr_datapoints, (window_size - stride)):
-        print(f"my {i}th window")
         if i + window_size < nr_datapoints:
             model_windows.append(
                 gpflow.models.VGP((X[i:i + window_size], Y[i:i + window_size]), kernel=kern, likelihood=lik))
@@ -149,7 +149,7 @@ def __sliding_window(X, Y, D, window_size, stride):
             model_windows.append(gpflow.models.VGP((X[i:-1], Y[i:-1]), kernel=kern, likelihood=lik))
     return model_windows
 
-def __format_data(X,Y):
+def format_data(X, Y):
     '''
 
     :param X: the input (N,)
@@ -168,7 +168,74 @@ def __format_data(X,Y):
                 X_aug.append([X[n], d])
     return np.array(X_aug), np.array(Y_aug)
 
-def run_MGARCH(data ):
+def reformat_data(X,D, samples = False):
+    N = int(X.shape[-2]/D)
+
+    if samples:
+        nsampl = X.shape[0]
+        deformated_X = np.reshape(X, (nsampl, N, D))
+    else:
+        deformated_X = np.reshape(X,(N, D))
+    return deformated_X
+
+def forecast_MGARCH(data, ntrain,ntest ):
+    X, Y = data
+    N, D = Y.shape
+    print("running MGARCH rollout")
+    pd_rets = __MGARCH_data_preprocesssing(data)
+
+    # compute DCC-Garch in R using rmgarch package
+    pandas2ri.activate()
+    with localconverter(ro.default_converter + pandas2ri.converter):
+        r_rets = ro.conversion.py2rpy(pd_rets)
+    # convert the daily returns from pandas dataframe in Python to dataframe in R
+    r_dccgarch_code = """
+                        library('rmgarch')
+                        function(r_rets, npred, nout){
+                                univariate_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                                                        variance.model = list(garchOrder = c(1,1),
+                                                                            variance.targeting = FALSE, 
+                                                                            model = "sGARCH"),
+                                                        distribution.model = "norm")
+                                n <- dim(r_rets)[2]
+                                
+                                gogarch_spec <-gogarchspec(mean.model = list(model = 'VAR', lag = 1),distribution.model = 'mvnorm', ica = 'fastica')
+                                gogarch_fit <- gogarchfit(gogarch_spec, data=r_rets,  out.sample = nout,gfun = "tanh")
+                                
+                                forecast <- gogarchforecast(gogarch_fit, n.ahead = npred, n.roll = 0)
+                                
+                                cov <- rcov(forecast)
+                                mean <- fitted(forecast)
+
+                                list(cov,mean)
+                        }
+                        """
+    r_dccgarch = ro.r(r_dccgarch_code)
+    nout = N - (ntrain+ntest)
+    npred = ntest
+    r_res = r_dccgarch(r_rets, npred, nout)
+
+    pandas2ri.deactivate()
+    # end of R
+
+    forecast_cov = r_res[0]  # model parameters
+    forecast_mean = r_res[1]
+    datafr = pd.DataFrame(forecast_cov)
+    datafrmean = pd.DataFrame(forecast_mean).T
+    mgarch_sigma = np.zeros((ntest, D, D))
+
+    for i in range(ntest * D * D):
+        mgarch_sigma[i // (D * D), (i % (D * D)) // D, (i % (D * D)) % D] = datafr[i]
+    mgarch_mean= np.zeros((ntest, D))
+    print(forecast_mean)
+    for i in range(ntest * D ):
+        col_D = i // ntest
+        row_n = i % ntest
+        dat = datafrmean[i]
+        mgarch_mean[row_n, col_D] = dat
+    return mgarch_mean, mgarch_sigma
+
+def run_MGARCH(data, forecast_n_hours=5):
     X,Y = data
     N, D = Y.shape
     print("running MGARCH inference")
@@ -200,12 +267,12 @@ def run_MGARCH(data ):
                             covariances = rcov(go_fit)
                             var = go_fit@model[["varcoef"]]
                             cof = coef(go_fit)
-                            list(go_fit, forecasts@mforecast$H, covariances,cof )
+                            forecasts
+                            list(go_fit, forecasts@mforecast, covariances,cof )
                     }
                     """
     r_dccgarch = ro.r(r_dccgarch_code)
-    n_days = 10
-    r_res = r_dccgarch(r_rets, n_days)
+    r_res = r_dccgarch(r_rets, forecast_n_hours)
 
     pandas2ri.deactivate()
     # end of R
@@ -227,6 +294,86 @@ def run_MGARCH(data ):
 
 def __MGARCH_data_preprocesssing(data):
     X,Y = data
-    df = pd.DataFrame(Y, columns=['Column_A', 'Column_B', 'Column_C'])
+    df = pd.DataFrame(Y)
     pd_rets = pd.DataFrame(df)
     return pd_rets
+
+def sample_y(mu, sigma):
+    '''
+    takes mu and sigma samples, samples y from multivariate gaussian and
+    returns the mean and the variance of y
+    :param mu samples of mu (SxNxD)
+    :param sigma samples of sigma (SxNxDxD)
+    :return mean (NxD) and variance (NxD) of y
+    '''
+    y_samples = np.zeros_like(mu)
+    S,N,_ = y_samples.shape
+    for s in range(S):
+        for t in range(N):
+            y_samples[s, t] = np.random.multivariate_normal(mu[s, t], sigma[s, t])
+    mu_y = np.mean(y_samples, axis=0)
+    var_y = np.var(y_samples, axis=0)
+    return mu_y, var_y, y_samples
+
+def cross_validate(modelname, data, n_splits = 4, test_s=None, num_iter = 500, num_samples = 200):
+    '''
+    :param modelname: model to be trained
+    :param data: (X,Y) with X: N*P and Y: N*PxD
+    :param n_splits: the number of test splits
+    :param test_s: maximum test block size, meaning how many days ahead are predicted at max
+    :return: list of predictions made by the model
+    '''
+    tscv = TimeSeriesSplit(n_splits=n_splits, test_size= test_s)
+    X,Y = data
+    T = np.max(X)
+    N,D = Y.shape
+    i = 0
+
+    test_all = []
+    pred_all = []
+
+    for train_index, test_index in tscv.split(X):
+        X_train, X_test = np.take(X, train_index), np.take(X,test_index)
+        y_train, y_test = np.take(Y, train_index, axis = 0), np.take(Y,test_index, axis = 0)
+        print(f"round {i} train size {X_train.shape} test size {X_test.shape} ")
+        i = i + 1
+        test_all.append(y_test)
+        #train model
+        if modelname == "BANNER":
+            wishart_model = run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
+            posterior_wishart_process = wishart_model['wishart process']
+            tiled_testpoints = np.tile(X_test, (D, 1)).T
+            sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
+            y_mean_gwp, y_var_gwp, y_samples = sample_y(mu_samples_gwp, sigma_samples_gwp)
+            pred_all.append(y_samples)
+            #samples
+
+        elif modelname == "MOGP":
+            mogp_model = run_MOGP(data=(X,Y), iterations = 100)[0]
+            aug_test_X, aug_test_y = format_data(X_test, y_test)
+            mu_y,var_y = mogp_model.predict_f(np.array(aug_test_X))
+            y_samples = mogp_model.predict_f_samples(np.array(aug_test_X),num_samples)
+            pred_all.append(y_samples)
+            #samples
+        elif modelname == "MGARCH":
+            ntrain = X_train.shape[0]
+            ntest = X_test.shape[0]
+            mgarch_mu, mgarch_sigma = forecast_MGARCH((X,Y),ntrain,ntest)
+            pred_all.append(mgarch_mu)
+        else:
+            raise Exception("Sorry this model type is not recognised, try BANNER, MOGP or MGARCH")
+    #for nr of test rounds
+        #divide the data into training data and test data (training must have at least 100 data points)
+        #train the model
+        #predict
+    #average mse/correlation?
+    #if we take the average, we lose some information about where the model struggled the most.
+    #perhaps return the entire list so at least we can plot the thing
+    #also return the predicted points, so we can plot them on top of our data series.
+    if modelname == "MGARCH":
+        ys= np.concatenate((test_all), axis= 0)
+        ps= np.concatenate((pred_all),axis = 0)
+    else:
+        ys = np.concatenate((test_all), axis=0)
+        ps = np.concatenate((pred_all), axis=1)
+    return ys,ps,
