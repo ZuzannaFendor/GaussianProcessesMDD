@@ -1,13 +1,16 @@
+import numpy as np
+
 from AnalysisUtils import data_processing_pcg as datapcg
 from AnalysisUtils import plot_pcg as plotpcg
 import matplotlib.pyplot as plt
 
 
-data, week_data = datapcg.import_ESMdata()
+data, col_names, scl_data = datapcg.import_ESMdata()
+
 
 variable_names = data.columns.values.tolist()
 print(variable_names)
-dosage_data = data.iloc[:, [2,3,4]]
+dosage_data = data.iloc[:, [0,1,2]]
 print(dosage_data.columns)
 dosage_data = dosage_data.drop_duplicates("dayno")
 

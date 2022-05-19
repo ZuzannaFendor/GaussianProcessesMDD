@@ -104,8 +104,7 @@ def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
     print("running MOGP inference")
     X, Y = data
     N, D = Y.shape
-    #format the data to include the coregionalization label
-    X, Y = format_data(X, Y)
+
     # create the sliding window models
     if window_size is None:
         window_size = N
@@ -128,7 +127,8 @@ def __sliding_window(X, Y, D, window_size, stride):
     '''
     lik = gpflow.likelihoods.SwitchedLikelihood([gpflow.likelihoods.Gaussian() for i in range(D)])
     output_dim = D  # Number of outputs
-    rank = D  # Rank of W:  it is the number of degrees of correlation between the outputs.
+    rank = 2 #D  # Rank of W:  it is the number of degrees of correlation between the outputs.
+    rank = 2 #D  # Rank of W:  it is the number of degrees of correlation between the outputs.
 
     # Base kernel
     k = gpflow.kernels.Matern32(active_dims=[0])
@@ -143,10 +143,13 @@ def __sliding_window(X, Y, D, window_size, stride):
     model_windows = []
     for i in range(0, nr_datapoints, (window_size - stride)):
         if i + window_size < nr_datapoints:
+            # format the data to include the coregionalization label
+            x_window,y_window = format_data(X[i:i + window_size], Y[i:i + window_size])
             model_windows.append(
-                gpflow.models.VGP((X[i:i + window_size], Y[i:i + window_size]), kernel=kern, likelihood=lik))
+                gpflow.models.VGP((x_window,y_window), kernel=kern, likelihood=lik))
         else:
-            model_windows.append(gpflow.models.VGP((X[i:-1], Y[i:-1]), kernel=kern, likelihood=lik))
+            x_window,y_window = format_data(X[i:-1], Y[i:-1])
+            model_windows.append(gpflow.models.VGP((x_window,y_window), kernel=kern, likelihood=lik))
     return model_windows
 
 def format_data(X, Y):
