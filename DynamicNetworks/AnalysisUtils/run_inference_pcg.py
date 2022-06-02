@@ -343,6 +343,7 @@ def cross_validate(modelname, data, n_splits = 4, test_s=None, num_iter = 500, n
         test_all.append(y_test)
         #train model
         if modelname == "BANNER":
+            #TODO num inducing 0.2 etc en batch size
             wishart_model = run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
             posterior_wishart_process = wishart_model['wishart process']
             tiled_testpoints = np.tile(X_test, (D, 1)).T

@@ -20,12 +20,18 @@ from AnalysisUtils import metrics
 # Y = np.array([np.sin(np.linspace(0,T,N))+np.random.rand(N),np.linspace(0,T,N)*0.3+np.random.rand(N),np.linspace(0,T,N)+np.random.rand(N),np.ones(N)+np.random.rand(N)*0.2,np.linspace(T,0,N)*np.random.rand(N)])
 # Y = Y.T
 
-data, colnames = dataprpcg.import_ESMdata()
+data, colnames, scl = dataprpcg.import_ESMdata()
+print(data.head(5))
 data = data.loc[:,['hour_no','mood_down','pat_worry','phy_tired']].dropna()
+
 X = data['hour_no'].to_numpy(dtype="float64")[:100]
 Y = data.loc[:,['mood_down','pat_worry','phy_tired']].to_numpy(dtype="float64")[:100,:]
+
+data_regular = dataprpcg.intrapolate(data,"linear","3H")
 print("x",X.dtype)
 print("Y",Y.dtype)
+
+Y_reg = data_regular.to_numpy(dtype="float64")
 
 N, D, T = Y.shape[0],Y.shape[1], np.max(X)
 # plot data in a scatterplot
@@ -82,12 +88,12 @@ tiled_testpoints = np.tile(testpoints, (D, 1)).T
 #### model of the depression progression         ####
 
 
-wishart_model = runpcg.run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
-posterior_wishart_process = wishart_model['wishart process']
-sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
-sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(tiled_testpoints)
-y_mu_gwp, y_var_gwp, y_samples = runpcg.sample_y(mu_samples_gwp,sigma_samples_gwp)
-plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
+# wishart_model = runpcg.run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
+# posterior_wishart_process = wishart_model['wishart process']
+# sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
+# sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(tiled_testpoints)
+# y_mu_gwp, y_var_gwp, y_samples = runpcg.sample_y(mu_samples_gwp,sigma_samples_gwp)
+# plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
 
 # mogp_model = runpcg.run_MOGP(data=(X,Y), iterations = 10)[0]
 # aug_test_X, _ = dataprpcg.stackify_data(testpoints,np.ones((N_test,D)))
@@ -97,6 +103,8 @@ plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
 # plotpcg.plot_timeseries(testpoints, mumu, vuvu, X, Y)
 # Xtest(60,), mus (3, 60) vs (3, 60), X (1476,) Y (1476, 3)
 
-# mgarch_model= runpcg.run_MGARCH(data=(X,Y))
-# mgarch_covariance = mgarch_model["covariance_matrix"]
+
+mgarch_model= runpcg.run_MGARCH(data=(X,Y_reg))
+mgarch_covariance = mgarch_model["covariance_matrix"]
+forecast_mu, forecast_sigma = runpcg.forecast_MGARCH(data, ntrain,ntest )
 print("finished")
