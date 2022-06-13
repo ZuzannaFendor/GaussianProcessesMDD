@@ -7,6 +7,7 @@ def import_ESMdata():
     :return: scl dataset and daily dataset
     '''
     data = pd.read_csv(r"C:\Users\Zizi\Desktop\master\Thesis\GaussianProcessesMDD\ESMdata\ESMdata.csv")
+    # data = pd.read_csv(r"/content/gdrive/MyDrive/Colab Notebooks/DynamicNetworks/data/ESMdata.csv")
     # day no is the day number of the year in which the experiment took place, so
     # it starts at 226 and ends at 98.
     # this is shifted to start at 1 and end at 239 such that the first day is day 1 and the last day is day 239
@@ -19,30 +20,25 @@ def import_ESMdata():
     data = data.iloc[:,data_indeces]
     data['hour_no'] = data.apply(lambda row: dayno_to_hour(row), axis=1)
 
-    #TODO all likert scales to 0-7 scale instead of -3 to 3 in some cases.
-    #down, lonely, anxious, guilty
-    print(data.columns.values)
-    print(min(data["mood_down"]))
+    #down, lonely, anxious, guilty rescale from -3...3 to 1...7
     data["mood_down"] = data["mood_down"] + 4
     data["mood_lonely"] = data["mood_lonely"] + 4
     data["mood_guilty"] = data["mood_guilty"] + 4
     data["mood_anxious"] = data["mood_anxious"] + 4
-    print(min(data["mood_down"]))
-    data = categorize_vars(data)
+    data = __categorize_vars(data)
     data.dropna()
     return data, data.columns.values.tolist(), scl_data
 
 def limit_vars(data):
     return data[['mood_relaxed', 'mood_down', 'mood_irritat', 'mood_satisfi', "dayno"]]
 
-def categorize_vars(data):
-    new_data = pd.DataFrame()
-    new_data["neg_affect"] = data[["mood_down","mood_lonely","mood_guilty","mood_anxious","mood_doubt"]].sum(axis=1)
-    new_data["pos_affect"] = data[["mood_satisfi", "mood_cheerf", "mood_relaxed","mood_enthus", "mood_strong" ]].sum(axis=1)
-    new_data["mental_unrest"] = data[["mood_irritat", "pat_agitate"]].sum(axis=1)
-    new_data["worry"] = data["pat_worry"]
-    new_data["sus"] = data["mood_suspic"]
-    return new_data
+def __categorize_vars(data):
+    data["neg_affect"] = data[["mood_down","mood_lonely","mood_guilty","mood_anxious","mood_doubt"]].sum(axis=1)/5
+    data["pos_affect"] = data[["mood_satisfi", "mood_cheerf", "mood_relaxed","mood_enthus", "mood_strong" ]].sum(axis=1)/5
+    data["mental_unrest"] = data[["mood_irritat", "pat_agitate"]].sum(axis=1)/2
+    data["worry"] = data["pat_worry"]
+    data["sus"] = data["mood_suspic"]
+    return data
 
 
 def extract_scl(data):
@@ -64,7 +60,7 @@ def dayno_to_hour(row):
 
 
 
-def intrapolate(data, method, samplesize = "3H"):
+def resample_data(data, method, samplesize = "3H"):
     '''
     resamples the data into equal intervals and fills in the gaps
     through choosing the nearest value or through linear interpolation
@@ -90,10 +86,9 @@ def __intrapolate_linear(data, samplesize = "3H"):
     :return:
     '''
 
-    return data.resample(samplesize ).first(min_count =1 ).interpolate(method="time")
+    return data.resample(samplesize ).first(min_count = 1 ).interpolate(method="time")
 
-def interpolate_remove(data):
-    pass
+
 
 def stackify_data(X,Y):
     N,D = Y.shape
@@ -105,3 +100,7 @@ def stackify_data(X,Y):
                 Y_aug.append([Y[n,d], d])
                 X_aug.append([X[n], d])
     return X_aug, Y_aug
+
+def simulate_static_cov(L):
+    cov = np.matmul(L,L.T) + 1e-6
+    np.fill_diagonal(cov, value = 1.)

@@ -4,6 +4,7 @@ import gpflow
 from gpflow.kernels import SquaredExponential, SharedIndependent, SeparateIndependent
 from gpflow.inducing_variables import SharedIndependentInducingVariables, InducingPoints
 from gpflow.ci_utils import ci_niter
+from gpflow.utilities import print_summary
 
 from Banner.src.models.WishartProcess import WishartProcess
 from Banner.util.training_util import run_adam
@@ -16,6 +17,7 @@ import rpy2.robjects as ro
 import numpy as np
 import pandas as pd
 from rpy2.robjects.conversion import localconverter
+import matplotlib.pyplot as plt
 
 from sklearn.model_selection import TimeSeriesSplit
 
@@ -66,6 +68,7 @@ def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, lear
     Z = tf.identity(Z_init)
     iv = SharedIndependentInducingVariables(InducingPoints(Z))  # multi output inducing variables
 
+    lengthscale_base = 50
     kernel_type = 'partially_shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
     kernel = SquaredExponential(lengthscales=5.)
 
@@ -76,7 +79,7 @@ def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, lear
             [SquaredExponential(lengthscales=1. - (i + 6) * 0.01) for i in range(latent_dim)])
     elif kernel_type == 'partially_shared':
         kernel = PartlySharedIndependentMultiOutput(
-            [SquaredExponential(lengthscales=0.5 + i * 0.5) for i in range(D)], nu=(nu + mnu_val))
+            [SquaredExponential(lengthscales=50 + i * 5) for i in range(D)], nu=(nu + mnu_val))
     else:
         raise NotImplementedError
 
@@ -115,6 +118,161 @@ def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
             m.training_loss, m.trainable_variables, options=dict(maxiter=iterations), method="L-BFGS-B",
         )
     return models
+
+def run_MOGP2(data, T, iterations=5000, num_inducing = None, window_size = None , stride = 0):
+    '''
+    Uses multioutput WITHOUT coregionalization.
+    :param data: data: Tuple (X, Y) of input and responses.
+    :param T: Last timepoint of the time series (assume we start at t=0).
+    :param iterations: maximum number of iterations for training
+    :param window_size: the size of the sliding window
+    :return: a list of trained MOGP models.
+    '''
+    print("running MOGP inference")
+    X, Y = data
+    N, D = Y.shape
+
+    data = (X,Y)
+    if num_inducing is None:
+        num_inducing = int(0.4 * N)
+
+
+    nu = D + 1  # Degrees of freedom
+    R = 10  # samples for variational expectation
+
+    # in case of fully dependent mu,
+    # the degrees of freedom for mu are exactly the same as for sigma
+    # in all other cases, there is an additional degree of freedom used by
+    # mu only
+
+    latent_dim = int(nu * D)
+
+    if num_inducing == N:
+        Z_init = tf.identity(X)  # X.copy()
+    else:
+        Z_init = np.array(
+            [np.linspace(0, T, num_inducing) for _ in range(D)]).T  # initial inducing variable locations
+    Z = tf.identity(Z_init)
+    Z_init2 = np.linspace(-5, 5, num_inducing)[:, None]
+    iv = SharedIndependentInducingVariables(InducingPoints(Z_init2))  # multi output inducing variables
+
+    lengthscale_base = 50
+    kernel_type = 'shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
+    kernel = SquaredExponential(lengthscales=5.)+ gpflow.kernels.Linear()
+
+
+    if kernel_type == 'shared':
+        kernel = SharedIndependent(kernel, output_dim=D)
+    elif kernel_type == 'separate':
+        kernel = SeparateIndependent(
+            [SquaredExponential(lengthscales=1. - (i + 6) * 0.01) for i in range(latent_dim)])
+    elif kernel_type == 'partially_shared':
+        kernel = PartlySharedIndependentMultiOutput(
+            [SquaredExponential(lengthscales=50 + i * 5) for i in range(D)], nu=nu )
+    else:
+        raise NotImplementedError
+
+    # likelihood
+    likelihood = gpflow.likelihoods.Gaussian()
+    # create GWP model
+
+    model =  gpflow.models.SVGP(kernel, likelihood, inducing_variable=iv, num_latent_gps=latent_dim)
+    print_summary(model)
+    optimizer = gpflow.optimizers.Scipy()
+    optimizer.minimize(model.training_loss_closure(data),
+        variables=model.trainable_variables,
+        method="l-bfgs-b",
+        options={"disp": True, "maxiter": iterations},
+    )
+    print_summary(model)
+    return model
+
+def run_example(data, lower=-8., upper=8.):
+    MAXITER = ci_niter(2000)
+
+    X,Y = data
+    N = Y.shape[0]  # number of points
+    D = 1  # number of input dimensions
+    M = 15  # number of inducing points
+
+    P = Y.shape[1]  # number of observations = output dimensions
+    L = P #2  # number of latent GPs
+    def generate_data(N=100):
+        X = np.random.rand(N)[:, None] * 10 - 5  # Inputs = N x D
+        G = np.hstack((0.5 * np.sin(3 * X) + X, 3.0 * np.cos(X) - X))  # G = N x L
+        W = np.array([[0.5, -0.3, 1.5], [-0.4, 0.43, 0.0]])  # L x P
+        F = np.matmul(G, W)  # N x P
+        Y = F + np.random.randn(*F.shape) * [0.2, 0.2, 0.2]
+
+        return X, Y
+
+    # X, Y = data = generate_data(N)
+
+
+    Zinit = np.linspace(int(np.min(X)), int(np.max(X)), M)[:, None]
+
+    def plot_model(m, lower=-8.0, upper=8.0):
+        pX = np.linspace(lower, upper, 100)[:, None]
+        pY, pYv = m.predict_y(pX)
+        if pY.ndim == 3:
+            pY = pY[:, 0, :]
+        plt.plot(X, Y, "x")
+        plt.gca().set_prop_cycle(None)
+        plt.plot(pX, pY)
+        for i in range(pY.shape[1]):
+            top = pY[:, i] + 2.0 * pYv[:, i] ** 0.5
+            bot = pY[:, i] - 2.0 * pYv[:, i] ** 0.5
+            plt.fill_between(pX[:, 0], top, bot, alpha=0.3)
+        plt.xlabel("X")
+        plt.ylabel("f")
+        plt.title(f"ELBO: {m.elbo(data):.3}")
+        plt.plot(Z, Z * 0.0, "o")
+        plt.show()
+
+    # create multi-output kernel
+    # kernel = gpflow.kernels.SharedIndependent(
+    #     gpflow.kernels.SquaredExponential() , output_dim=P
+    # )
+    kern_list = [gpflow.kernels.SquaredExponential() + gpflow.kernels.Linear() for _ in range(L)]
+    # Create multi-output kernel from kernel list
+    kernel = gpflow.kernels.LinearCoregionalization(
+        kern_list, W=np.random.randn(P, L)
+    )
+    # initialization of inducing input locations (M random points from the training inputs)
+    Z = Zinit.copy()
+    # create multi-output inducing variables from Z
+    iv = gpflow.inducing_variables.SharedIndependentInducingVariables(
+        gpflow.inducing_variables.InducingPoints(Z)
+    )
+
+    # initialize mean of variational posterior to be of shape MxL
+    q_mu = np.zeros((M, L))
+    # initialize \sqrt(Σ) of variational posterior to be of shape LxMxM
+    q_sqrt = np.repeat(np.eye(M)[None, ...], L, axis=0) * 1.0
+
+    # create SVGP model as usual and optimize
+    m = gpflow.models.SVGP(
+        kernel, gpflow.likelihoods.Gaussian(), inducing_variable=iv, q_mu=q_mu, q_sqrt=q_sqrt
+    )
+    #
+    # m = gpflow.models.SVGP(kernel, gpflow.likelihoods.Gaussian(), inducing_variable=iv, num_latent_gps=P)
+    print_summary(m)
+    return m
+
+    def optimize_model_with_scipy(model):
+        optimizer = gpflow.optimizers.Scipy()
+        optimizer.minimize(
+            model.training_loss_closure(data),
+            variables=model.trainable_variables,
+            method="l-bfgs-b",
+            options={"disp": True, "maxiter": MAXITER},
+        )
+
+    optimize_model_with_scipy(m)
+    print_summary(m)
+
+    plot_model(m, lower, upper)
+
 
 def __sliding_window(X, Y, D, window_size, stride):
     '''

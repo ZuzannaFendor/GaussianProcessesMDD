@@ -11,7 +11,7 @@ from matplotlib import animation
 
 def partial_correlations(K):
     '''
-    param K: RxTxDxD matrix of covariances
+    param K: RxTxDxD matrix of precisions
             R: number of samples
             T: number of time steps
             D: number of output dimensions

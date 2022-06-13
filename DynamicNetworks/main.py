@@ -9,6 +9,7 @@ from AnalysisUtils import run_inference_pcg as runpcg
 from AnalysisUtils import plot_pcg as plotpcg
 from AnalysisUtils import data_processing_pcg as dataprpcg
 from AnalysisUtils import metrics
+import time
 
 
 #data characteristics
@@ -22,16 +23,14 @@ from AnalysisUtils import metrics
 
 data, colnames, scl = dataprpcg.import_ESMdata()
 print(data.head(5))
-data = data.loc[:,['hour_no','mood_down','pat_worry','phy_tired']].dropna()
 
-X = data['hour_no'].to_numpy(dtype="float64")[:100]
-Y = data.loc[:,['mood_down','pat_worry','phy_tired']].to_numpy(dtype="float64")[:100,:]
+X = data['hour_no'].to_numpy(dtype="float64")
+Y = data.loc[:,['neg_affect','pos_affect','sus','worry','mental_unrest']].to_numpy(dtype="float64")
 
-data_regular = dataprpcg.intrapolate(data,"linear","3H")
+data_regular = dataprpcg.resample_data(data,"linear","3H")
 print("x",X.dtype)
 print("Y",Y.dtype)
 
-Y_reg = data_regular.to_numpy(dtype="float64")
 
 N, D, T = Y.shape[0],Y.shape[1], np.max(X)
 # plot data in a scatterplot
@@ -87,24 +86,31 @@ tiled_testpoints = np.tile(testpoints, (D, 1)).T
 #### using all of the data to provide us with a  ####
 #### model of the depression progression         ####
 
-
+#
+# tic = time.perf_counter()
 # wishart_model = runpcg.run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
 # posterior_wishart_process = wishart_model['wishart process']
 # sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
 # sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(tiled_testpoints)
 # y_mu_gwp, y_var_gwp, y_samples = runpcg.sample_y(mu_samples_gwp,sigma_samples_gwp)
+# toc = time.perf_counter()
+# print(f"wishart took {toc-tic} ns to run in total")
 # plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
 
-# mogp_model = runpcg.run_MOGP(data=(X,Y), iterations = 10)[0]
-# aug_test_X, _ = dataprpcg.stackify_data(testpoints,np.ones((N_test,D)))
-# mu_y,var_y = mogp_model.predict_f(np.array(aug_test_X))
-# mumu = np.reshape(mu_y,(N_test,D)).T
-# vuvu = np.reshape(var_y,(N_test,D)).T
-# plotpcg.plot_timeseries(testpoints, mumu, vuvu, X, Y)
+tic = time.perf_counter()
+mogp_model = runpcg.run_MOGP(data=(X,Y), iterations = 100)[0]
+aug_test_X, _ = dataprpcg.stackify_data(testpoints,np.ones((N_test,D)))
+mu_y,var_y = mogp_model.predict_f(np.array(aug_test_X))
+mumu = np.reshape(mu_y,(N_test,D)).T
+vuvu = np.reshape(var_y,(N_test,D)).T
+toc = time.perf_counter()
+print(f"mogp took {toc-tic} ns to run in total")
+plotpcg.plot_timeseries(testpoints, mumu, vuvu, X, Y)
 # Xtest(60,), mus (3, 60) vs (3, 60), X (1476,) Y (1476, 3)
 
 
-mgarch_model= runpcg.run_MGARCH(data=(X,Y_reg))
-mgarch_covariance = mgarch_model["covariance_matrix"]
-forecast_mu, forecast_sigma = runpcg.forecast_MGARCH(data, ntrain,ntest )
+# mgarch_model= runpcg.run_MGARCH(data=(X,Y_reg))
+# mgarch_covariance = mgarch_model["covariance_matrix"]
+# ntrain, ntest = 100, 20
+# forecast_mu, forecast_sigma = runpcg.forecast_MGARCH(data, ntrain, ntest )
 print("finished")

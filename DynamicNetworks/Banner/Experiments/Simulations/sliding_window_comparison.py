@@ -8,10 +8,10 @@ from gpflow.inducing_variables import SharedIndependentInducingVariables, Induci
 from gpflow.utilities import print_summary
 from gpflow.ci_utils import ci_niter
 
-from Models.WishartProcess import WishartProcess
-from Models.training_util import run_adam
-from Kernels.PartlySharedIndependentMOK import CustomMultiOutput
-from Likelihoods.WishartProcessLikelihood import WishartLikelihood
+from Banner.src.models.WishartProcess import WishartProcess
+from Banner.util.training_util import run_adam
+from Banner.src.kernels.PartlySharedIndependentMOK import PartlySharedIndependentMultiOutput
+from Banner.src.likelihoods.WishartProcessLikelihood import WishartLikelihood
 
 # mpl.rcParams['pdf.fonttype'] = 42
 # mpl.rcParams['ps.fonttype'] = 42
@@ -141,7 +141,7 @@ def run_wishart_process_inference(data, T, iterations=10000, num_inducing=None, 
     elif kernel_type == 'separate':
         kernel = SeparateIndependent([SquaredExponential(lengthscales=1. - (i + 6) * 0.01) for i in range(latent_dim)])
     elif kernel_type == 'partially_shared':
-        kernel = CustomMultiOutput([SquaredExponential(lengthscales=0.5 + i * 0.5) for i in range(D)], nu=nu)
+        kernel = PartlySharedIndependentMultiOutput([SquaredExponential(lengthscales=0.5 + i * 0.5) for i in range(D)], nu=nu)
     else:
         raise NotImplementedError
 
