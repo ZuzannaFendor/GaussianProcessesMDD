@@ -69,7 +69,7 @@ def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, lear
     iv = SharedIndependentInducingVariables(InducingPoints(Z))  # multi output inducing variables
 
     lengthscale_base = 50
-    kernel_type = 'partially_shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
+    kernel_type = 'shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
     kernel = SquaredExponential(lengthscales=5.)
 
     if kernel_type == 'shared':
@@ -88,7 +88,7 @@ def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, lear
     # create GWP model
 
     wishart_process = WishartProcess(kernel, likelihood, D=D, nu=nu, inducing_variable=iv, mnu=mnu)
-
+    print_summary(wishart_process)
     # If num_inducing==N, we do not actually have inducing points.
     if num_inducing == N:
         gpflow.set_trainable(wishart_process.inducing_variable, False)
@@ -286,7 +286,6 @@ def __sliding_window(X, Y, D, window_size, stride):
     lik = gpflow.likelihoods.SwitchedLikelihood([gpflow.likelihoods.Gaussian() for i in range(D)])
     output_dim = D  # Number of outputs
     rank = 2 #D  # Rank of W:  it is the number of degrees of correlation between the outputs.
-    rank = 2 #D  # Rank of W:  it is the number of degrees of correlation between the outputs.
 
     # Base kernel
     k = gpflow.kernels.Matern32(active_dims=[0])
@@ -408,6 +407,7 @@ def run_MGARCH(data, forecast_n_hours=5):
         r_rets = ro.conversion.py2rpy(pd_rets)
     # convert the daily returns from pandas dataframe in Python to dataframe in R
     r_dccgarch_code = """
+                    library('rugarch')
                     library('rmgarch')
                     function(r_rets, n_days){
                             univariate_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
@@ -420,9 +420,9 @@ def run_MGARCH(data, forecast_n_hours=5):
                                                 dccOrder = c(1,1),
                                                 distribution = "mvnorm")
                             gogarch_spec <-gogarchspec(mean.model = list(model = 'VAR', lag = 2), distribution.model = 'mvnorm', ica = 'fastica')
-
-                            dcc_fit <- dccfit(dcc_spec, data=r_rets)
-                            go_fit <- gogarchfit(gogarch_spec, data = r_rets, solver = 'hybrid', gfun = 'tanh', maxiter1 = 40000, epsilon = 1e-08, rseed = 100)
+                            
+                            dcc_fit <- dccfit(dcc_spec, data=na.omit(r_rets))
+                            go_fit <- gogarchfit(gogarch_spec, data = na.omit(r_rets), solver = 'hybrid', gfun = 'tanh', maxiter1 = 40000, epsilon = 1e-08, rseed = 100)
 
                             forecasts <- gogarchforecast(go_fit, n.ahead = n_days)
                             covariances = rcov(go_fit)
@@ -455,8 +455,8 @@ def run_MGARCH(data, forecast_n_hours=5):
 
 def __MGARCH_data_preprocesssing(data):
     X,Y = data
-    df = pd.DataFrame(Y)
-    pd_rets = pd.DataFrame(df)
+    pd_rets = pd.DataFrame(Y)
+    nulls = pd_rets.isnull().values
     return pd_rets
 
 def sample_y(mu, sigma):

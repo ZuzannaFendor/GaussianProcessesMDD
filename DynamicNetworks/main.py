@@ -1,5 +1,6 @@
 #imports
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
@@ -22,15 +23,12 @@ import time
 # Y = Y.T
 
 data, colnames, scl = dataprpcg.import_ESMdata()
-print(data.head(5))
+X = data['hour_no'].to_numpy(dtype="float64")[:30]
+Y = data.loc[:,['neg_affect','pos_affect','sus','worry','mental_unrest']].to_numpy(dtype="float64")[:30,:]
 
-X = data['hour_no'].to_numpy(dtype="float64")
-Y = data.loc[:,['neg_affect','pos_affect','sus','worry','mental_unrest']].to_numpy(dtype="float64")
-
-data_regular = dataprpcg.resample_data(data,"linear","3H")
-print("x",X.dtype)
-print("Y",Y.dtype)
-
+datareg= dataprpcg.resample_data(data.loc[:,['neg_affect','pos_affect','sus','worry','mental_unrest']],"nearest","3H" )
+regX = datareg['neg_affect'].to_numpy(dtype="float64")[2:]
+regY = datareg.loc[:,['neg_affect','pos_affect','sus','worry','mental_unrest']].to_numpy(dtype="float64")[2:,:]
 
 N, D, T = Y.shape[0],Y.shape[1], np.max(X)
 # plot data in a scatterplot
@@ -40,7 +38,7 @@ N, D, T = Y.shape[0],Y.shape[1], np.max(X)
 # plt.show()
 
 
-num_iter = 20000
+num_iter = 20
 num_samples = 200
 N_test = 60
 testpoints = np.linspace(0, T, N_test)
@@ -87,15 +85,15 @@ tiled_testpoints = np.tile(testpoints, (D, 1)).T
 #### model of the depression progression         ####
 
 #
-# tic = time.perf_counter()
-# wishart_model = runpcg.run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
-# posterior_wishart_process = wishart_model['wishart process']
-# sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
-# sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(tiled_testpoints)
-# y_mu_gwp, y_var_gwp, y_samples = runpcg.sample_y(mu_samples_gwp,sigma_samples_gwp)
-# toc = time.perf_counter()
-# print(f"wishart took {toc-tic} ns to run in total")
-# plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
+tic = time.perf_counter()
+wishart_model = runpcg.run_BANNER(data=(X, Y), mnu = "shared", T=T,iterations=num_iter,num_inducing=int(0.4*N),batch_size=100)
+posterior_wishart_process = wishart_model['wishart process']
+sigma_samples_gwp , mu_samples_gwp= posterior_wishart_process.predict_mc(tiled_testpoints, num_samples)
+sigma_mean_gwp, mu_mean_gwp = posterior_wishart_process.predict_map(tiled_testpoints)
+y_mu_gwp, y_var_gwp, y_samples = runpcg.sample_y(mu_samples_gwp,sigma_samples_gwp)
+toc = time.perf_counter()
+print(f"wishart took {toc-tic} ns to run in total")
+plotpcg.plot_timeseries(testpoints, y_mu_gwp.T, y_var_gwp.T, X, Y)
 
 tic = time.perf_counter()
 mogp_model = runpcg.run_MOGP(data=(X,Y), iterations = 100)[0]
@@ -108,9 +106,10 @@ print(f"mogp took {toc-tic} ns to run in total")
 plotpcg.plot_timeseries(testpoints, mumu, vuvu, X, Y)
 # Xtest(60,), mus (3, 60) vs (3, 60), X (1476,) Y (1476, 3)
 
-
-# mgarch_model= runpcg.run_MGARCH(data=(X,Y_reg))
-# mgarch_covariance = mgarch_model["covariance_matrix"]
-# ntrain, ntest = 100, 20
-# forecast_mu, forecast_sigma = runpcg.forecast_MGARCH(data, ntrain, ntest )
+isna = pd.DataFrame(regY).isnull().values.any()
+isna = pd.DataFrame(regX).isnull().values.any()
+mgarch_model= runpcg.run_MGARCH(data=(regX,regY))
+mgarch_covariance = mgarch_model["covariance_matrix"]
+ntrain, ntest = 100, 20
+# forecast_mu, forecast_sigma = runpcg.forecast_MGARCH((regX,regY), ntrain, ntest )
 print("finished")

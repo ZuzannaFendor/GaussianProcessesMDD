@@ -6,7 +6,7 @@ def import_ESMdata():
     this function loads the data and performs the initial basic processing
     :return: scl dataset and daily dataset
     '''
-    data = pd.read_csv(r"C:\Users\Zizi\Desktop\master\Thesis\GaussianProcessesMDD\ESMdata\ESMdata.csv")
+    data = pd.read_csv(r"C:\Users\Zuzanna\Documents\Msc\GaussianProcessesMDD\DynamicNetworks\data\ESMdata.csv")
     # data = pd.read_csv(r"/content/gdrive/MyDrive/Colab Notebooks/DynamicNetworks/data/ESMdata.csv")
     # day no is the day number of the year in which the experiment took place, so
     # it starts at 226 and ends at 98.
@@ -69,10 +69,11 @@ def resample_data(data, method, samplesize = "3H"):
     :param samplesize:
     :return:
     '''
+
     if method=="nearest":
-        data_res = data.resample(samplesize).pad()
+        data_res = data.dropna().resample(samplesize).pad()
     elif method == "linear":
-        data_res = __intrapolate_linear(data, samplesize=samplesize)
+        data_res = __intrapolate_linear(data.dropna(), samplesize=samplesize)
     else:
         print("UNKNOWN INTERPOLATION")
     return data_res
@@ -85,8 +86,8 @@ def __intrapolate_linear(data, samplesize = "3H"):
     :param samplesize: str, the sample period
     :return:
     '''
-
-    return data.resample(samplesize ).first(min_count = 1 ).interpolate(method="time")
+    a = pd.resa
+    return data.resample(samplesize).first(min_count = 1 ).interpolate(method="time")
 
 
 
