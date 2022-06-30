@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import TimeSeriesSplit
 
 
-def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, learning_rate=0.01, batch_size=25):
+def run_BANNER(data, T, mnu = "shared", l_scale =1.,iterations=5000, num_inducing=None, learning_rate=0.01, batch_size=25):
     """
     :param data: Tuple (X, Y) of input and responses.
     :param T: Last timepoint of the time series (assume we start at t=0).
@@ -68,31 +68,17 @@ def run_BANNER(data, T, mnu = "shared", iterations=5000, num_inducing=None, lear
     Z = tf.identity(Z_init)
     iv = SharedIndependentInducingVariables(InducingPoints(Z))  # multi output inducing variables
 
-    lengthscale_base = 50
-    kernel_type = 'shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
-    kernel = SquaredExponential(lengthscales=5.)
+    kernel = construct_kernel(latent_dim, nu, mnu_val,D,l_scale)
 
-    if kernel_type == 'shared':
-        kernel = SharedIndependent(kernel, output_dim=latent_dim)
-    elif kernel_type == 'separate':
-        kernel = SeparateIndependent(
-            [SquaredExponential(lengthscales=1. - (i + 6) * 0.01) for i in range(latent_dim)])
-    elif kernel_type == 'partially_shared':
-        kernel = PartlySharedIndependentMultiOutput(
-            [SquaredExponential(lengthscales=50 + i * 5) for i in range(D)], nu=(nu + mnu_val))
-    else:
-        raise NotImplementedError
 
     # likelihood
     likelihood = WishartLikelihood(D, nu, mnu=mnu, R=R, additive_noise=additive_noise, model_inverse=model_inverse)
     # create GWP model
 
     wishart_process = WishartProcess(kernel, likelihood, D=D, nu=nu, inducing_variable=iv, mnu=mnu)
-    print_summary(wishart_process)
     # If num_inducing==N, we do not actually have inducing points.
     if num_inducing == N:
         gpflow.set_trainable(wishart_process.inducing_variable, False)
-
     elbo = run_adam(wishart_process, data, ci_niter(iterations), learning_rate, batch_size, natgrads=False, pb=True)
     return {'wishart process': wishart_process, 'ELBO': elbo}
 
@@ -119,73 +105,42 @@ def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
         )
     return models
 
-def run_MOGP2(data, T, iterations=5000, num_inducing = None, window_size = None , stride = 0):
-    '''
-    Uses multioutput WITHOUT coregionalization.
-    :param data: data: Tuple (X, Y) of input and responses.
-    :param T: Last timepoint of the time series (assume we start at t=0).
-    :param iterations: maximum number of iterations for training
-    :param window_size: the size of the sliding window
-    :return: a list of trained MOGP models.
-    '''
-    print("running MOGP inference")
-    X, Y = data
-    N, D = Y.shape
+def run_svgpMOGP(data,  iterations=5000, inducing_ratio=0.4, batch_size=100, window_size = None , stride = 0):
+    X,Y = data
+    N,D = Y.shape
+    Tmax = np.max(X)
+    Tmin = np.min(X)
+    augX, augY = format_data(X, Y)
+    Naug = augX.shape[0]
+    rank = 1  # Rank of W
 
-    data = (X,Y)
-    if num_inducing is None:
-        num_inducing = int(0.4 * N)
+    #kernel
+    k = gpflow.kernels.Matern32(active_dims=[0])
 
+    # Coregion kernel
+    coreg = gpflow.kernels.Coregion(output_dim=D, rank=rank, active_dims=[1])
 
-    nu = D + 1  # Degrees of freedom
-    R = 10  # samples for variational expectation
-
-    # in case of fully dependent mu,
-    # the degrees of freedom for mu are exactly the same as for sigma
-    # in all other cases, there is an additional degree of freedom used by
-    # mu only
-
-    latent_dim = int(nu * D)
-
-    if num_inducing == N:
-        Z_init = tf.identity(X)  # X.copy()
-    else:
-        Z_init = np.array(
-            [np.linspace(0, T, num_inducing) for _ in range(D)]).T  # initial inducing variable locations
-    Z = tf.identity(Z_init)
-    Z_init2 = np.linspace(-5, 5, num_inducing)[:, None]
-    iv = SharedIndependentInducingVariables(InducingPoints(Z_init2))  # multi output inducing variables
-
-    lengthscale_base = 50
-    kernel_type = 'shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
-    kernel = SquaredExponential(lengthscales=5.)+ gpflow.kernels.Linear()
+    kern = k * coreg
 
 
-    if kernel_type == 'shared':
-        kernel = SharedIndependent(kernel, output_dim=D)
-    elif kernel_type == 'separate':
-        kernel = SeparateIndependent(
-            [SquaredExponential(lengthscales=1. - (i + 6) * 0.01) for i in range(latent_dim)])
-    elif kernel_type == 'partially_shared':
-        kernel = PartlySharedIndependentMultiOutput(
-            [SquaredExponential(lengthscales=50 + i * 5) for i in range(D)], nu=nu )
-    else:
-        raise NotImplementedError
+    M = int(N * inducing_ratio)
 
-    # likelihood
-    likelihood = gpflow.likelihoods.Gaussian()
-    # create GWP model
 
-    model =  gpflow.models.SVGP(kernel, likelihood, inducing_variable=iv, num_latent_gps=latent_dim)
-    print_summary(model)
-    optimizer = gpflow.optimizers.Scipy()
-    optimizer.minimize(model.training_loss_closure(data),
-        variables=model.trainable_variables,
-        method="l-bfgs-b",
-        options={"disp": True, "maxiter": iterations},
+    Z, _ = format_data(np.linspace(Tmin, Tmax, M), np.ones((M, D)))
+    Z = np.array(Z)
+    lik = gpflow.likelihoods.SwitchedLikelihood(
+        [gpflow.likelihoods.Gaussian() for i in range(D)]
     )
-    print_summary(model)
-    return model
+
+    m = gpflow.models.SVGP(kernel=kern, likelihood=lik, inducing_variable=Z, num_data=Naug)
+
+    # train models
+    # fit the covariance function parameters
+    gpflow.set_trainable(m.inducing_variable, False)
+
+    elbo = run_adam(m, (augX, augY), iterations=iterations, learning_rate=0.1, minibatch_size=20,
+                                  natgrads=True, pb=True)
+    return {'gaussian process': m, 'ELBO': elbo}
 
 def run_example(data, lower=-8., upper=8.):
     MAXITER = ci_niter(2000)
@@ -255,8 +210,8 @@ def run_example(data, lower=-8., upper=8.):
         kernel, gpflow.likelihoods.Gaussian(), inducing_variable=iv, q_mu=q_mu, q_sqrt=q_sqrt
     )
     #
-    # m = gpflow.models.SVGP(kernel, gpflow.likelihoods.Gaussian(), inducing_variable=iv, num_latent_gps=P)
-    print_summary(m)
+    m = gpflow.models.SVGP(kernel, gpflow.likelihoods.Gaussian(), inducing_variable=iv, num_latent_gps=P)
+
     return m
 
     def optimize_model_with_scipy(model):
@@ -453,10 +408,48 @@ def run_MGARCH(data, forecast_n_hours=5):
 
     return {'model':r_gogarch_model ,'forecast':r_forecast_cov,'covariance_matrix':mgarch_sigma, "coefficients":coef}
 
+def construct_kernel( latent_dim, nu, mnu_val,D, l_scale):
+    kernel_type = 'shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
+
+    # kernel = gpflow.kernels.Exponential(lengthscales=l_scale) * gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale))
+    kernel = gpflow.kernels.Cosine(lengthscales=5.0)
+    set_untrainable_variance(kernel)
+
+    if kernel_type == 'shared':
+        kernel = SharedIndependent(kernel, output_dim=latent_dim)
+    elif kernel_type == 'separate':
+        kernel_list = [gpflow.kernels.Exponential(lengthscales=l_scale - (i + 6) * 0.01)*gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale), period =3.) for i in range(latent_dim)]
+        [set_untrainable_variance(k) for k in kernel_list]
+        kernel = SeparateIndependent(kernel_list)
+    elif kernel_type == 'partially_shared':
+        #*gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale + i * 0.01), period =3.)
+        kernel_list =[gpflow.kernels.Exponential(lengthscales=l_scale + i * 0.2) * gpflow.kernels.Cosine(lengthscales=3.0)  for i in range(D)]
+        [set_untrainable_variance(k) for k in kernel_list]
+        kernel = PartlySharedIndependentMultiOutput(kernel_list, nu =(nu +mnu_val))
+    else:
+        raise NotImplementedError
+    return kernel
+
+def set_untrainable_variance(kernel):
+    if hasattr(kernel, 'kernels'):
+        for k in kernel.kernels:
+            if k.name =='product' or k.name== 'sum':
+                set_untrainable_variance(k)
+            elif k.name == 'periodic':
+                gpflow.set_trainable(k.base_kernel.variance, False)
+            else:
+                gpflow.set_trainable(k.variance, False)
+    else:
+        if kernel.name == 'product' or kernel.name == 'sum':
+            set_untrainable_variance(kernel)
+        elif kernel.name == 'periodic':
+            gpflow.set_trainable(kernel.base_kernel.variance, False)
+        else:
+            gpflow.set_trainable(kernel.variance, False)
+
 def __MGARCH_data_preprocesssing(data):
     X,Y = data
     pd_rets = pd.DataFrame(Y)
-    nulls = pd_rets.isnull().values
     return pd_rets
 
 def sample_y(mu, sigma):

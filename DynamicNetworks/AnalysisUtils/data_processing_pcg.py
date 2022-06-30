@@ -105,3 +105,70 @@ def stackify_data(X,Y):
 def simulate_static_cov(L):
     cov = np.matmul(L,L.T) + 1e-6
     np.fill_diagonal(cov, value = 1.)
+
+
+def simulate_data(duration, N, size=3, period=4, type ="periodic", max = 0.99, min = 0.01):
+    Ks, Sigmas = simulate_covariance_matrix(duration, N, size, period,type, max, min)
+    mu = np.zeros(size)
+    data = np.zeros((N,size))
+    for i in range(N):
+        data[i] = np.random.multivariate_normal(mu,Sigmas[i])
+    return data, Ks, Sigmas
+
+def simulate_covariance_matrix(duration,N,size, period, type ,max, min):
+    x = np.linspace(0,duration,N)
+    if type == "periodic":
+        Ks = np.array([periodically_changing_K(t,size,period) for _, t in enumerate(x)])
+    elif type == "linear_decrease":
+        Ks = np.array([linear_K(ind_t,N,max, min) for ind_t, _ in enumerate(x)])
+    else:
+        Warning("unknown type, will default to periodic")
+        Ks = np.array([periodically_changing_K(t, size, period) for _, t in enumerate(x)])
+    Sigmas =part_cor_to_cov(Ks)
+
+    #checked with cholesky decomposition whether the preselected covariances are positive definite
+
+    return Ks,Sigmas
+
+def periodically_changing_K(t, size , period ):
+
+    Ka = np.eye(size,size)
+    off_diag1 = np.array([0.2,-0.1,0.7])
+
+    Kb = np.eye(size,size)
+    off_diag2 = np.array([-0.3, -0.6, 0.2])
+    nr = 0
+    for i in range(size):
+        for j in range(i+1,size):
+            Ka[i,j] = off_diag1[nr]
+            Ka[j,i] = off_diag1[nr]
+            Kb[i,j] = off_diag2[nr]
+            Kb[j,i] = off_diag2[nr]
+            nr+=1
+    if (t%period) >= (period/2):
+        return Ka
+    else:
+        return Kb
+
+def linear_K(t,N,max, min):
+    '''
+    Computes a linearily decreasing covariance, in a network where all of the connections are equal.
+
+    :param t:
+    :param N:
+    :param max:
+    :param min:
+    :return:
+    '''
+    a = np.ones((3, 3)) - np.eye(3, 3)
+    K = a * max + np.eye(3,3)
+    diff = max - min
+    step = diff/N
+
+    return K - t * step * a
+
+
+
+
+def part_cor_to_cov(Ks):
+    return np.array([np.linalg.inv(K) for K in Ks])
