@@ -1,0 +1,15 @@
+name                                                              class      transform       prior    trainable    shape           dtype    value
+----------------------------------------------------------------  ---------  --------------  -------  -----------  --------------  -------  ------------------------------------------------------
+WishartProcess.kernel.kernel.kernels[0].variance                  Parameter  Softplus                 False        ()              float64  1.0
+WishartProcess.kernel.kernel.kernels[0].lengthscales              Parameter  Softplus                 True         ()              float64  270.57237840089334
+WishartProcess.kernel.kernel.kernels[1].base_kernel.variance      Parameter  Softplus                 False        ()              float64  1.0
+WishartProcess.kernel.kernel.kernels[1].base_kernel.lengthscales  Parameter  Softplus                 True         ()              float64  2.9371656130260013
+WishartProcess.kernel.kernel.kernels[1].period                    Parameter  Softplus                 True         ()              float64  3.0965977104548084
+WishartProcess.likelihood.A                                       Parameter  Softplus                 True         (3,)            float64  [0.3252503  0.58083197 0.56827713]
+WishartProcess.likelihood.p_sigma2inv_conc                        Parameter  Softplus                 True         ()              float64  0.10000000000000002
+WishartProcess.likelihood.p_sigma2inv_rate                        Parameter  Softplus                 True         ()              float64  9.999999999999999e-05
+WishartProcess.likelihood.q_sigma2inv_conc                        Parameter  Softplus                 True         (3,)            float64  [36.31462355 39.28883641 34.21131657]
+WishartProcess.likelihood.q_sigma2inv_rate                        Parameter  Softplus                 True         (3,)            float64  [37.82240241 42.6798987   4.40567914]
+WishartProcess.inducing_variable.inducing_variable.Z              Parameter  Identity                 True         (150, 3)        float64  [[-5.87057326e-02, -5.87057326e-02, -5.87057326e-02...
+WishartProcess.q_mu                                               Parameter  Identity                 True         (150, 15)       float64  [[-2.20807229e-02, -1.58229252e-02, 4.57022610e-02...
+WishartProcess.q_sqrt                                             Parameter  FillTriangular           True         (15, 150, 150)  float64  [[[7.52550334e-01, 0.00000000e+00, 0.00000000e+00...

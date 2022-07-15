@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 
 def MSE(Ytest, predictions ):
     '''
@@ -24,5 +25,27 @@ def correlation(Ytest, predictions):
     avg_pred = np.mean(predictions, axis  = 0) #averaged over samples
     corr = np.corrcoef(Ytest,avg_pred, rowvar=False)
     corr = np.diag(corr[:D,D:])
+
+    return corr
+
+def corr_timeseries(a,b):
+    q, p = scipy.stats.pearsonr(a, b)
+    return q,p
+
+def correlation_sigma(Ytest, predictions):
+    '''
+    Flattens the pridctions and labels such that each covariance of i j,
+    is flattened into N x DD
+    :param Ytest: (Ntest x D x D)
+    :param predictions: (R x Ntest x D x D)
+    :return: correlation averaged over R, for each n in N
+    '''
+    D = Ytest.shape[-1]
+    N = Ytest.shape[0]
+
+    avg_pred = np.reshape(np.mean(predictions, axis  = 0), (N,D*D) )#averaged over samples
+    Ytest = np.reshape(Ytest,(N,D*D))
+    corr = np.corrcoef(Ytest[0], avg_pred[0], rowvar = False)
+    corr = np.diag(corr[:,:D*D,D*D:], axis = 1)
 
     return corr

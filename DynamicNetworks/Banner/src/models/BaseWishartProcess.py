@@ -24,7 +24,7 @@ class WishartProcessBase(SVGP_deprecated):
         nu = D if nu is None else nu
         likelihood = WishartLikelihood(D, nu, mnu, R=10) if likelihood is None else likelihood
 
-        if mnu == "fully_dependent":
+        if mnu == "fully_dependent" or mnu =="zero":
             mnu_val = 0
         else:
             mnu_val = 1

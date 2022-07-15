@@ -29,8 +29,6 @@ def import_ESMdata():
     data.dropna()
     return data, data.columns.values.tolist(), scl_data
 
-def limit_vars(data):
-    return data[['mood_relaxed', 'mood_down', 'mood_irritat', 'mood_satisfi', "dayno"]]
 
 def __categorize_vars(data):
     data["neg_affect"] = data[["mood_down","mood_lonely","mood_guilty","mood_anxious","mood_doubt"]].sum(axis=1)/5
@@ -112,6 +110,9 @@ def simulate_data(duration, N, size=3, period=4, type ="periodic", max = 0.99, m
     mu = np.zeros(size)
     data = np.zeros((N,size))
     for i in range(N):
+        min_eig = np.min(np.real(np.linalg.eigvals(Sigmas[i])))
+        if min_eig < 0:
+            print("oh oh",i, Sigmas[i])
         data[i] = np.random.multivariate_normal(mu,Sigmas[i])
     return data, Ks, Sigmas
 
@@ -120,7 +121,30 @@ def simulate_covariance_matrix(duration,N,size, period, type ,max, min):
     if type == "periodic":
         Ks = np.array([periodically_changing_K(t,size,period) for _, t in enumerate(x)])
     elif type == "linear_decrease":
-        Ks = np.array([linear_K(ind_t,N,max, min) for ind_t, _ in enumerate(x)])
+
+        start =np.array([-0.1,-0.3,0.4])
+        S = np.eye(3,3)
+        S =fill_offdiagonals(S,size,start)
+
+        finish = np.array([-0.3, -0.6, 0.8])
+        F = np.eye(3, 3)
+        F = fill_offdiagonals(F, size, finish)
+
+        Ks = np.array([linear_K(ind_t,N,max, min, S, F) for ind_t, _ in enumerate(x)])
+    elif type == "mixed":
+        #peridic
+        Ks = np.array([periodically_changing_K(t, size, period) for _, t in enumerate(x)])
+        #linear
+        start = np.array([-0.1, -0.3, 0.4])
+        S = np.eye(3, 3)
+        S = fill_offdiagonals(S, size, start)
+
+        finish = np.array([-0.3, -0.6, 0.8])
+        F = np.eye(3, 3)
+        F = fill_offdiagonals(F, size, finish)
+
+        Ks = np.array([linear_K(ind_t, N, max, min, S, F) for ind_t, _ in enumerate(x)])
+        #static
     else:
         Warning("unknown type, will default to periodic")
         Ks = np.array([periodically_changing_K(t, size, period) for _, t in enumerate(x)])
@@ -133,24 +157,26 @@ def simulate_covariance_matrix(duration,N,size, period, type ,max, min):
 def periodically_changing_K(t, size , period ):
 
     Ka = np.eye(size,size)
-    off_diag1 = np.array([0.2,-0.1,0.7])
+    off_diag1 = np.array([0.5,-0.1,0.1])
 
     Kb = np.eye(size,size)
-    off_diag2 = np.array([-0.3, -0.6, 0.2])
-    nr = 0
-    for i in range(size):
-        for j in range(i+1,size):
-            Ka[i,j] = off_diag1[nr]
-            Ka[j,i] = off_diag1[nr]
-            Kb[i,j] = off_diag2[nr]
-            Kb[j,i] = off_diag2[nr]
-            nr+=1
+    off_diag2 = np.array([-0.3, -0.6, 0.8])
+
+    Ka =fill_offdiagonals(Ka,size,off_diag1)
+    Kb =fill_offdiagonals(Kb, size, off_diag2)
+    # for i in range(size):
+    #     for j in range(i+1,size):
+    #         Ka[i,j] = off_diag1[nr]
+    #         Ka[j,i] = off_diag1[nr]
+    #         Kb[i,j] = off_diag2[nr]
+    #         Kb[j,i] = off_diag2[nr]
+    #         nr+=1
     if (t%period) >= (period/2):
         return Ka
     else:
         return Kb
 
-def linear_K(t,N,max, min):
+def linear_K(t,N,max, min, start_array, finish_array):
     '''
     Computes a linearily decreasing covariance, in a network where all of the connections are equal.
 
@@ -160,15 +186,26 @@ def linear_K(t,N,max, min):
     :param min:
     :return:
     '''
-    a = np.ones((3, 3)) - np.eye(3, 3)
-    K = a * max + np.eye(3,3)
-    diff = max - min
-    step = diff/N
+    # a = np.ones((3, 3)) - np.eye(3, 3)
+    # K = a * start_array + np.eye(3,3)
+    # diff = max - min
+    # step = diff/N
+    diff = finish_array-start_array
+    step = diff/(N-1)
 
-    return K - t * step * a
+    return start_array + t * step
 
 
 
 
 def part_cor_to_cov(Ks):
     return np.array([np.linalg.inv(K) for K in Ks])
+
+def fill_offdiagonals(A,size,values):
+    nr = 0
+    for i in range(size):
+        for j in range(i+1,size):
+            A[i,j] = values[nr]
+            A[j,i] = values[nr]
+            nr+=1
+    return A

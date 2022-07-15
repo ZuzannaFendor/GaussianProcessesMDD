@@ -36,12 +36,10 @@ class WishartLikelihoodBase(ScalarLikelihood):
         """
         _, latent_dim = f_mean.shape
         N = tf.shape(Y)[0]
-
         # Produce R samples of F (latent GP points at the input locations X).
         # TF automatically differentiates through this.
         W = tf.dtypes.cast(tf.random.normal(shape=[self.R, N, latent_dim]), tf.float64)
         f_sample = W * f_cov**0.5 + f_mean
-
         f_sample = tf.reshape(f_sample, [self.R, N, self.cov_dim, -1])
 
         # compute the mean of the likelihood

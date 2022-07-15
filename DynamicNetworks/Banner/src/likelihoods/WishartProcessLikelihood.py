@@ -49,17 +49,13 @@ class WishartLikelihood(WishartLikelihoodBase):
         # Compute Sigma_n (aka AFFA)
         AF = self.A[:, None] * F[:,:,:,:self.nu]  # (R, N, D, nu)
         AFFA = tf.matmul(AF, AF, transpose_b=True)  # (R, N, D, D)
-
         # Compute mu_n
         if self.mnu == "independent":
             mu = self.A[:, None] * F[:,:,:,self.nu:]
         elif self.mnu == "shared":
             mu = self.A[:, None] * F[:,:,:,:]
         elif self.mnu =="fully_dependent":
-            mu = self.A[:,None]
-        else:
-            print("warning: mu is set to zero")
-            mu = tf.zeros_like(self.A[:,None])
+            mu = self.A[:, None] * F[:,:,:,:self.nu]
 
         # additive white noise (Lambda) for numerical precision
         if self.additive_noise:
@@ -84,7 +80,10 @@ class WishartLikelihood(WishartLikelihoodBase):
             log_det_cov = - log_det_cov
 
         # Compute (Y.T affa^-1 Y) term
-        y_diff  = Y - tf.reduce_sum(tf.reduce_mean(mu, axis = 0), axis= -1)
+        if self.mnu == "shared" or self.mnu == "independent" or self.mnu == "fully_dependent":
+            y_diff  = Y - tf.reduce_sum(tf.reduce_mean(mu, axis = 0), axis= -1)
+        else:
+            y_diff = Y
 
         if self.model_inverse:
             y_prec = tf.einsum('jk,ijkl->ijl', y_diff, AFFA)  # (R, N, D)  # j=N, k=D, i=, l=

@@ -1,4 +1,4 @@
-from src.models.WishartProcess import WishartProcessBase
+from ..models.WishartProcess import WishartProcessBase
 import numpy as np
 import gpflow
 import tensorflow as tf

@@ -10,6 +10,8 @@ from gpflow.monitor import (
     ScalarToTensorBoard,
 )
 
+from gpflow.utilities import tabulate_module_summary as tbm
+
 def run_adam(model, data, iterations, learning_rate=0.01, minibatch_size=25, natgrads=False, pb=True):
     """
     Utility function running the Adam optimizer.
@@ -51,7 +53,7 @@ def run_adam(model, data, iterations, learning_rate=0.01, minibatch_size=25, nat
     model_task = ModelToTensorBoard(log_dir, model)
     elbo_task = ScalarToTensorBoard(log_dir, lambda: -training_loss().numpy(), "ELBO")
 
-    short_period, long_period = 10, 100
+    short_period, long_period, very_long_period= 10, 100, 1000
     tasks = MonitorTaskGroup([elbo_task, model_task], period=short_period)
     monitor = Monitor(tasks)
 
@@ -68,6 +70,10 @@ def run_adam(model, data, iterations, learning_rate=0.01, minibatch_size=25, nat
         if step % long_period == 0:
             elbo = -training_loss().numpy()
             logf.append(elbo)
+        if step % very_long_period == 0:
+            text_file = open(f'{step}.txt', 'w')
+            text_file.write(tbm(model))
+            text_file.close()
 
     return logf
 

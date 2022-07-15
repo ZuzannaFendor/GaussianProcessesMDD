@@ -78,6 +78,25 @@ def plot_sigma_ground_truth(x, Sigma):
                 ax.set_title('$\sigma_{{{:d},{:d}}}(t)$'.format(i + 1, j + 1), fontsize=20)
     return fig, axes
 
+def plot_cov_approximation(Y,X,Sigmas):
+    fig, axes = plot_sigma_ground_truth(X, Sigmas)
+    D = Y.shape[1]
+    c1 = '#363537'
+    c2 = '#EF2D56'
+
+    cov_estimate = np.array([np.outer(y,y.T) for iy, y in enumerate(Y)])
+
+    for i in range(D):
+        for j in range(D):
+            ax = axes[i, j]
+            if j < i:
+                ax.axis('off')
+            else:
+                ax.scatter(X, cov_estimate[:,i,j], s =0.25,c=c2, label='estimated covariance from Y@Y.T')
+                ax.set_xlim([X[0], X[-1]])
+    return fig, axes
+
+
 def plot_loss(num_iter, loss):
     x = np.linspace(1, num_iter, len(loss))
     fig = plt.figure()
@@ -90,7 +109,7 @@ def plot_loss(num_iter, loss):
     plt.show()
 
 #
-def plot_sigma_predictions(samples, x, D, model,axes=None, plot_individuals=0):
+def plot_sigma_predictions(samples, x, D, model,axes=None, plot_individuals=0, lim = None):
     posterior_expectation = tf.reduce_mean(samples, axis=0).numpy()
     posterior_variance = tf.math.reduce_variance(samples, axis=0).numpy()
 
@@ -116,10 +135,14 @@ def plot_sigma_predictions(samples, x, D, model,axes=None, plot_individuals=0):
                     for ix in ixs:
                         ax.plot(x, samples[ix, :, i, j].numpy(), c=c2, alpha=0.4, lw=0.5)
                 ax.set_xlim([x[0], x[-1]])
+                if lim is not None:
+                    bottom, top = lim
+                    ax.set_ylim(bottom, top)
 
-def plot_cov_comparison(X, true_sigmas, sigma_samples,D,model = "BANNER",):
-    fig, axes = plot_sigma_ground_truth(X, true_sigmas)
-    plot_sigma_predictions(sigma_samples, X, D,model, axes)
+def plot_cov_comparison(X, true_sigmas, sigma_samples,D,model = "BANNER", figure =None, save=None, lim = None):
+    if figure is None:
+        fig, axes = plot_sigma_ground_truth(X, true_sigmas)
+    plot_sigma_predictions(sigma_samples, X, D,model, axes, lim = lim)
 
     axes[-1, -1].set_xlabel('Time (s)')
     axes[0, 0].set_ylabel('(Co)variance')
@@ -127,4 +150,8 @@ def plot_cov_comparison(X, true_sigmas, sigma_samples,D,model = "BANNER",):
     plt.figlegend(handles, labels,
                   ncol=1, loc='lower left', bbox_to_anchor=(0.1, 0.10), frameon=False)
     plt.tight_layout()
-    plt.show()
+    if save is None:
+        plt.show()
+    elif save:
+        plt.savefig(save)
+        plt.close(fig)

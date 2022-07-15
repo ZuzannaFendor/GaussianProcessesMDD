@@ -54,10 +54,10 @@ def run_BANNER(data, T, mnu = "shared", l_scale =1.,iterations=5000, num_inducin
     # the degrees of freedom for mu are exactly the same as for sigma
     # in all other cases, there is an additional degree of freedom used by
     # mu only
-    if mnu == "fully_dependent":
-        mnu_val = 0
-    else:
+    if mnu =="shared" or mnu == "independent":
         mnu_val = 1
+    else:
+        mnu_val = 0
     latent_dim = int((nu + mnu_val) * D)
 
     if num_inducing == N:
@@ -293,64 +293,64 @@ def reformat_data(X,D, samples = False):
         deformated_X = np.reshape(X,(N, D))
     return deformated_X
 
-def forecast_MGARCH(data, ntrain,ntest ):
-    X, Y = data
-    N, D = Y.shape
-    print("running MGARCH rollout")
-    pd_rets = __MGARCH_data_preprocesssing(data)
+# def forecast_MGARCH(data, ntrain,ntest ):
+#     X, Y = data
+#     N, D = Y.shape
+#     print("running MGARCH rollout")
+#     pd_rets = __MGARCH_data_preprocesssing(data)
+#
+#     # compute DCC-Garch in R using rmgarch package
+#     pandas2ri.activate()
+#     with localconverter(ro.default_converter + pandas2ri.converter):
+#         r_rets = ro.conversion.py2rpy(pd_rets)
+#     # convert the daily returns from pandas dataframe in Python to dataframe in R
+#     r_dccgarch_code = """
+#                         library('rmgarch')
+#                         function(r_rets, npred, nout){
+#                                 univariate_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+#                                                         variance.model = list(garchOrder = c(1,1),
+#                                                                             variance.targeting = FALSE,
+#                                                                             model = "sGARCH"),
+#                                                         distribution.model = "norm")
+#                                 n <- dim(r_rets)[2]
+#
+#                                 gogarch_spec <-gogarchspec(mean.model = list(model = 'VAR', lag = 1),distribution.model = 'mvnorm', ica = 'fastica')
+#                                 gogarch_fit <- gogarchfit(gogarch_spec, data=r_rets,  out.sample = nout,gfun = "tanh")
+#
+#                                 forecast <- gogarchforecast(gogarch_fit, n.ahead = npred, n.roll = 0)
+#
+#                                 cov <- rcov(forecast)
+#                                 mean <- fitted(forecast)
+#
+#                                 list(cov,mean)
+#                         }
+#                         """
+#     r_dccgarch = ro.r(r_dccgarch_code)
+#     nout = N - (ntrain+ntest)
+#     npred = ntest
+#     r_res = r_dccgarch(r_rets, npred, nout)
+#
+#     pandas2ri.deactivate()
+#     # end of R
+#
+#     forecast_cov = r_res[0]  # model parameters
+#     forecast_mean = r_res[1]
+#     datafr = pd.DataFrame(forecast_cov)
+#     datafrmean = pd.DataFrame(forecast_mean).T
+#     mgarch_sigma = np.zeros((ntest, D, D))
+#
+#     for i in range(ntest * D * D):
+#         mgarch_sigma[i // (D * D), (i % (D * D)) // D, (i % (D * D)) % D] = datafr[i]
+#     mgarch_mean= np.zeros((ntest, D))
+#     print(forecast_mean)
+#     for i in range(ntest * D ):
+#         col_D = i // ntest
+#         row_n = i % ntest
+#         dat = datafrmean[i]
+#         mgarch_mean[row_n, col_D] = dat
+#     return mgarch_mean, mgarch_sigma
 
-    # compute DCC-Garch in R using rmgarch package
-    pandas2ri.activate()
-    with localconverter(ro.default_converter + pandas2ri.converter):
-        r_rets = ro.conversion.py2rpy(pd_rets)
-    # convert the daily returns from pandas dataframe in Python to dataframe in R
-    r_dccgarch_code = """
-                        library('rmgarch')
-                        function(r_rets, npred, nout){
-                                univariate_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
-                                                        variance.model = list(garchOrder = c(1,1),
-                                                                            variance.targeting = FALSE, 
-                                                                            model = "sGARCH"),
-                                                        distribution.model = "norm")
-                                n <- dim(r_rets)[2]
-                                
-                                gogarch_spec <-gogarchspec(mean.model = list(model = 'VAR', lag = 1),distribution.model = 'mvnorm', ica = 'fastica')
-                                gogarch_fit <- gogarchfit(gogarch_spec, data=r_rets,  out.sample = nout,gfun = "tanh")
-                                
-                                forecast <- gogarchforecast(gogarch_fit, n.ahead = npred, n.roll = 0)
-                                
-                                cov <- rcov(forecast)
-                                mean <- fitted(forecast)
-
-                                list(cov,mean)
-                        }
-                        """
-    r_dccgarch = ro.r(r_dccgarch_code)
-    nout = N - (ntrain+ntest)
-    npred = ntest
-    r_res = r_dccgarch(r_rets, npred, nout)
-
-    pandas2ri.deactivate()
-    # end of R
-
-    forecast_cov = r_res[0]  # model parameters
-    forecast_mean = r_res[1]
-    datafr = pd.DataFrame(forecast_cov)
-    datafrmean = pd.DataFrame(forecast_mean).T
-    mgarch_sigma = np.zeros((ntest, D, D))
-
-    for i in range(ntest * D * D):
-        mgarch_sigma[i // (D * D), (i % (D * D)) // D, (i % (D * D)) % D] = datafr[i]
-    mgarch_mean= np.zeros((ntest, D))
-    print(forecast_mean)
-    for i in range(ntest * D ):
-        col_D = i // ntest
-        row_n = i % ntest
-        dat = datafrmean[i]
-        mgarch_mean[row_n, col_D] = dat
-    return mgarch_mean, mgarch_sigma
-
-def run_MGARCH(data, forecast_n_hours=5):
+def run_MGARCH(data, refit_every = 5, nrTest = 20):
     X,Y = data
     N, D = Y.shape
     print("running MGARCH inference")
@@ -364,55 +364,64 @@ def run_MGARCH(data, forecast_n_hours=5):
     r_dccgarch_code = """
                     library('rugarch')
                     library('rmgarch')
-                    function(r_rets, n_days){
+                    function(r_rets, refit_every, nrTest){
                             univariate_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
                                                         variance.model = list(garchOrder = c(1,1),
                                                                             variance.targeting = FALSE, 
                                                                             model = "sGARCH"),
                                                         distribution.model = "norm")
                             n <- dim(r_rets)[2]
-                            dcc_spec <- dccspec(uspec = multispec(replicate(n, univariate_spec)),
-                                                dccOrder = c(1,1),
-                                                distribution = "mvnorm")
-                            gogarch_spec <-gogarchspec(mean.model = list(model = 'VAR', lag = 2), distribution.model = 'mvnorm', ica = 'fastica')
+                            lag = 2
                             
+                            dcc_spec <- dccspec(uspec = multispec(replicate(n, univariate_spec)),VAR = TRUE,
+                                                robust = FALSE, lag = lag,
+                                                dccOrder = c(1,1),
+                                                distribution = "mvnorm"
+                                                )
+                             
                             dcc_fit <- dccfit(dcc_spec, data=na.omit(r_rets))
-                            go_fit <- gogarchfit(gogarch_spec, data = na.omit(r_rets), solver = 'hybrid', gfun = 'tanh', maxiter1 = 40000, epsilon = 1e-08, rseed = 100)
-
-                            forecasts <- gogarchforecast(go_fit, n.ahead = n_days)
-                            covariances = rcov(go_fit)
-                            var = go_fit@model[["varcoef"]]
-                            cof = coef(go_fit)
-                            forecasts
-                            list(go_fit, forecasts@mforecast, covariances,cof )
+                            
+                            forecasts <- dccroll(dcc_spec,data=na.omit(r_rets), n.ahead = 1, forecast.length =nrTest, refit.every = refit_every)
+                            covariances = rcov(dcc_fit)
+                            var = dcc_fit@model[["varcoef"]]
+                            cof = coef(dcc_fit)
+                            means = fitted(forecasts)
+                            list(dcc_fit, forecasts, covariances,cof ,means)
                     }
                     """
     r_dccgarch = ro.r(r_dccgarch_code)
-    r_res = r_dccgarch(r_rets, forecast_n_hours)
+    r_res = r_dccgarch(r_rets, refit_every, nrTest)
 
     pandas2ri.deactivate()
     # end of R
 
-    r_gogarch_model = r_res[0]  # model parameters
+    r_model = r_res[0]  # model parameters
 
     r_forecast_cov = r_res[1]  # forecasted covariance matrices for n_days
 
     r_cov = r_res[2]  # the covarince matrices for known points
     coef = r_res[3]
-
+    r_forecast_condmean =r_res[4]
 
     mgarch_sigma = np.zeros((N, D, D))
     for i in range(N * D * D):
         mgarch_sigma[i // (D * D), (i % (D * D)) // D, (i % (D * D)) % D] = r_cov[i]
 
+    pred_y = np.zeros((nrTest,D))
+    for j in range(nrTest * D):
+        n = j%nrTest
+        d = j//nrTest
+        pred_y[n,d] = r_forecast_condmean[j]
 
-    return {'model':r_gogarch_model ,'forecast':r_forecast_cov,'covariance_matrix':mgarch_sigma, "coefficients":coef}
+
+
+    return {'model':r_model ,'forecast_cov':r_forecast_cov,'covariance_matrix':mgarch_sigma, "coefficients":coef, "y_predictions":pred_y}
 
 def construct_kernel( latent_dim, nu, mnu_val,D, l_scale):
-    kernel_type = 'shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
+    kernel_type = 'partially_shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
 
     # kernel = gpflow.kernels.Exponential(lengthscales=l_scale) * gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale))
-    kernel = gpflow.kernels.Cosine(lengthscales=5.0)
+    kernel = gpflow.kernels.Exponential(lengthscales=l_scale) #* gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale), period =3.)
     set_untrainable_variance(kernel)
 
     if kernel_type == 'shared':
@@ -423,7 +432,7 @@ def construct_kernel( latent_dim, nu, mnu_val,D, l_scale):
         kernel = SeparateIndependent(kernel_list)
     elif kernel_type == 'partially_shared':
         #*gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale + i * 0.01), period =3.)
-        kernel_list =[gpflow.kernels.Exponential(lengthscales=l_scale + i * 0.2) * gpflow.kernels.Cosine(lengthscales=3.0)  for i in range(D)]
+        kernel_list =[gpflow.kernels.Exponential(lengthscales=l_scale)* gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale), period =3.) for i in range(D)]
         [set_untrainable_variance(k) for k in kernel_list]
         kernel = PartlySharedIndependentMultiOutput(kernel_list, nu =(nu +mnu_val))
     else:
@@ -513,7 +522,7 @@ def cross_validate(modelname, data, n_splits = 4, test_s=None, num_iter = 500, n
         elif modelname == "MGARCH":
             ntrain = X_train.shape[0]
             ntest = X_test.shape[0]
-            mgarch_mu, mgarch_sigma = forecast_MGARCH((X,Y),ntrain,ntest)
+            mgarch_mu, mgarch_sigma = run_MGARCH((X,Y),ntrain,ntest)
             pred_all.append(mgarch_mu)
         else:
             raise Exception("Sorry this model type is not recognised, try BANNER, MOGP or MGARCH")

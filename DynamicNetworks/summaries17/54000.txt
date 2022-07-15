@@ -1,0 +1,12 @@
+name                                                  class      transform       prior    trainable    shape           dtype    value
+----------------------------------------------------  ---------  --------------  -------  -----------  --------------  -------  -----------------------------------------------------
+WishartProcess.kernel.kernel.variance                 Parameter  Softplus                 False        ()              float64  1.0
+WishartProcess.kernel.kernel.lengthscales             Parameter  Softplus                 True         ()              float64  210.369155315224
+WishartProcess.likelihood.A                           Parameter  Softplus                 True         (3,)            float64  [0.32383231 0.3709837  0.66665333]
+WishartProcess.likelihood.p_sigma2inv_conc            Parameter  Softplus                 True         ()              float64  0.10000000000000002
+WishartProcess.likelihood.p_sigma2inv_rate            Parameter  Softplus                 True         ()              float64  9.999999999999999e-05
+WishartProcess.likelihood.q_sigma2inv_conc            Parameter  Softplus                 True         (3,)            float64  [32.05010823 32.83459003 27.52072535]
+WishartProcess.likelihood.q_sigma2inv_rate            Parameter  Softplus                 True         (3,)            float64  [34.32749477 41.94507427  0.04797421]
+WishartProcess.inducing_variable.inducing_variable.Z  Parameter  Identity                 True         (150, 3)        float64  [[1.30066017, 1.30066017, 1.30066017...
+WishartProcess.q_mu                                   Parameter  Identity                 True         (150, 12)       float64  [[-6.12142100e-02, -4.40664226e-03, 8.75000152e-02...
+WishartProcess.q_sqrt                                 Parameter  FillTriangular           True         (12, 150, 150)  float64  [[[7.42068458e-01, 0.00000000e+00, 0.00000000e+00...

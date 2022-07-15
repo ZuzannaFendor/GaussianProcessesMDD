@@ -27,7 +27,7 @@ class WishartProcess(WishartProcessBase):
 
     def predict_mc(self, X_test, n_samples):
         """
-        Returns samples of the covariance matrix $\Sigma_n$ for each time point
+        Returns samples of the covariance matrix $\Sigma_n$ and the mean $\mu$ for each time point
 
         :param X_test: (N_test,D) input locations to predict covariance matrix over.
         :param n_samples: (int)
@@ -54,10 +54,11 @@ class WishartProcess(WishartProcessBase):
         elif mnu == "fully_dependent":
             mu = A[:, None] * f_sample[:, :, :, :nu]  # (n_samples, N_test, D, mnu)
             mu = np.sum(mu, axis = -1) # (n_samples, N_test, D)
+        elif mnu == "zero":
+            mu = np.zeros((N_test, D))
         else:
             print("invalid mnu value, mnu will be set to zero")
-            mu = np.zeros((n_samples, N_test, D))
-            
+            mu = np.zeros(N_test, D)
         if self.likelihood.additive_noise:
             Lambda = self.get_additive_noise(n_samples)
             affa = tf.linalg.set_diag(affa, tf.linalg.diag_part(affa) + Lambda)
@@ -68,7 +69,7 @@ class WishartProcess(WishartProcessBase):
 
     def predict_map(self, X_test):
         """
-        Get mean prediction
+        Get mean prediction of Sigma and mu
         :param X_test(N_test, D) input locations to predict covariance matrix over.
         :return: (D,D) mean estimate of covariance
         """
@@ -93,10 +94,11 @@ class WishartProcess(WishartProcessBase):
         elif mnu == "fully_dependent":
             mu = A[:, None] * mean[:, :,:nu]  # (N_test, D, mnu)
             mu = np.sum(mu, axis = -1) # (N_test, D)
+        elif mnu == "zero":
+            mu = np.zeros(( N_test, D))
         else:
             print("invalid mnu value, mnu will be set to zero")
-            mu = np.zeros(( N_test, D))
-        
+            mu = np.zeros(N_test,D)
         if self.likelihood.additive_noise:
             Lambda = self.get_additive_noise(1)
             affa = tf.linalg.set_diag(affa, tf.linalg.diag_part(affa) + Lambda)
