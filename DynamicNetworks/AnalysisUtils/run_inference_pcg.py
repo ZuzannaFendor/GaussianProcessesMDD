@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import TimeSeriesSplit
 
 
-def run_BANNER(data, T, mnu = "shared", l_scale =1.,iterations=5000, num_inducing=None, learning_rate=0.01, batch_size=25):
+def run_BANNER(data, T, mnu = "shared", l_scale =1., iterations=5000, num_inducing=None, learning_rate=0.01, batch_size=25):
     """
     :param data: Tuple (X, Y) of input and responses.
     :param T: Last timepoint of the time series (assume we start at t=0).
@@ -386,7 +386,8 @@ def run_MGARCH(data, refit_every = 5, nrTest = 20):
                             var = dcc_fit@model[["varcoef"]]
                             cof = coef(dcc_fit)
                             means = fitted(forecasts)
-                            list(dcc_fit, forecasts, covariances,cof ,means)
+                            pred_cov = rcov(forecasts)
+                            list(dcc_fit, forecasts, covariances,cof ,means,pred_cov)
                     }
                     """
     r_dccgarch = ro.r(r_dccgarch_code)
@@ -402,20 +403,23 @@ def run_MGARCH(data, refit_every = 5, nrTest = 20):
     r_cov = r_res[2]  # the covarince matrices for known points
     coef = r_res[3]
     r_forecast_condmean =r_res[4]
+    r_forecast_condcov = r_res[5]
 
     mgarch_sigma = np.zeros((N, D, D))
     for i in range(N * D * D):
         mgarch_sigma[i // (D * D), (i % (D * D)) // D, (i % (D * D)) % D] = r_cov[i]
 
-    pred_y = np.zeros((nrTest,D))
+    pred_mu = np.zeros((nrTest,D))
     for j in range(nrTest * D):
         n = j%nrTest
         d = j//nrTest
-        pred_y[n,d] = r_forecast_condmean[j]
+        pred_mu[n,d] = r_forecast_condmean[j]
 
+    mgarch_sigma_pred = np.zeros((nrTest, D, D))
+    for i in range(nrTest * D * D):
+        mgarch_sigma_pred[i // (D * D), (i % (D * D)) // D, (i % (D * D)) % D] = r_forecast_condcov[i]
 
-
-    return {'model':r_model ,'forecast_cov':r_forecast_cov,'covariance_matrix':mgarch_sigma, "coefficients":coef, "y_predictions":pred_y}
+    return {'model':r_model ,'forecast_cov':r_forecast_cov,'covariance_matrix':mgarch_sigma, "coefficients":coef, "mu_predictions":pred_mu, "cov_predictions":mgarch_sigma_pred}
 
 def construct_kernel( latent_dim, nu, mnu_val,D, l_scale):
     kernel_type = 'partially_shared'  # ['shared', 'separate', 'partially_shared']   # shares the same kernel parameters across input dimension
@@ -432,7 +436,7 @@ def construct_kernel( latent_dim, nu, mnu_val,D, l_scale):
         kernel = SeparateIndependent(kernel_list)
     elif kernel_type == 'partially_shared':
         #*gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale + i * 0.01), period =3.)
-        kernel_list =[gpflow.kernels.Exponential(lengthscales=l_scale)* gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale), period =3.) for i in range(D)]
+        kernel_list =[gpflow.kernels.Exponential(lengthscales=l_scale)* gpflow.kernels.Periodic(base_kernel=gpflow.kernels.SquaredExponential(lengthscales=l_scale), period =1.0) for i in range(D)]
         [set_untrainable_variance(k) for k in kernel_list]
         kernel = PartlySharedIndependentMultiOutput(kernel_list, nu =(nu +mnu_val))
     else:

@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 
-def MSE(Ytest, predictions ):
+def MSE(Ytest, predictions):
     '''
 
     :param Ytest: (N x D) the true data values
@@ -13,6 +13,31 @@ def MSE(Ytest, predictions ):
         for iy,y in enumerate(Ytest):
             mse[sample,iy] = (y - predictions[sample,iy])**2
     return mse
+
+
+def log_lik(Ytest, Sigmapred, Mupred):
+    '''
+
+    :param Ytest: (Ntest x D) true data values
+    :param Sigmapred: (Ntest x D x D) predictied covariance matrices
+    :param Mupred: (Ntest x D) predicted mu
+    :return: log likelihood
+    '''
+    N = Ytest.shape[0]
+
+    if Sigmapred.ndim >3:
+
+        nr_s = Sigmapred.shape[0]
+        logliks = np.zeros((nr_s, N,))
+        for s in range(nr_s):
+            for n in range(N):
+                logliks[s,n] = scipy.stats.multivariate_normal.logpdf(Ytest[n], mean=Mupred[s,n], cov=Sigmapred[s,n],allow_singular=True)
+        return np.mean(logliks, axis = 0)
+    else:
+        for n in range(N):
+            logliks = np.zeros(( N,))
+            logliks[n] = scipy.stats.multivariate_normal.logpdf(Ytest[n],mean=Mupred[n],cov=Sigmapred[n], allow_singular=True)
+    return logliks
 
 def correlation(Ytest, predictions):
     '''

@@ -107,13 +107,13 @@ def simulate_static_cov(L):
 
 def simulate_data(duration, N, size=3, period=4, type ="periodic", max = 0.99, min = 0.01):
     Ks, Sigmas = simulate_covariance_matrix(duration, N, size, period,type, max, min)
-    mu = np.zeros(size)
+    mus = np.array([np.linspace(0,4.0,N),np.cos(np.linspace(0,duration,N)), -2*np.ones((N))])
     data = np.zeros((N,size))
     for i in range(N):
         min_eig = np.min(np.real(np.linalg.eigvals(Sigmas[i])))
         if min_eig < 0:
             print("oh oh",i, Sigmas[i])
-        data[i] = np.random.multivariate_normal(mu,Sigmas[i])
+        data[i] = np.random.multivariate_normal(mus[:,i],Sigmas[i])
     return data, Ks, Sigmas
 
 def simulate_covariance_matrix(duration,N,size, period, type ,max, min):
