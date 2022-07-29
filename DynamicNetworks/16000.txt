@@ -1,25 +1,13 @@
-name                                                                         class      transform       prior    trainable    shape           dtype    value
----------------------------------------------------------------------------  ---------  --------------  -------  -----------  --------------  -------  ----------------------------------------------------
-WishartProcess.kernel.kernels[0].kernel.kernels[0].variance                  Parameter  Softplus                 False        ()              float64  1.0
-WishartProcess.kernel.kernels[0].kernel.kernels[0].lengthscales              Parameter  Softplus                 True         ()              float64  9.993949951020126
-WishartProcess.kernel.kernels[0].kernel.kernels[1].base_kernel.variance      Parameter  Softplus                 False        ()              float64  1.0
-WishartProcess.kernel.kernels[0].kernel.kernels[1].base_kernel.lengthscales  Parameter  Softplus                 True         ()              float64  16.147654749496418
-WishartProcess.kernel.kernels[0].kernel.kernels[1].period                    Parameter  Softplus                 True         ()              float64  1.0252587629443455
-WishartProcess.kernel.kernels[1].kernel.kernels[0].variance                  Parameter  Softplus                 False        ()              float64  1.0
-WishartProcess.kernel.kernels[1].kernel.kernels[0].lengthscales              Parameter  Softplus                 True         ()              float64  5.218257597316785
-WishartProcess.kernel.kernels[1].kernel.kernels[1].base_kernel.variance      Parameter  Softplus                 False        ()              float64  1.0
-WishartProcess.kernel.kernels[1].kernel.kernels[1].base_kernel.lengthscales  Parameter  Softplus                 True         ()              float64  11.806995981580505
-WishartProcess.kernel.kernels[1].kernel.kernels[1].period                    Parameter  Softplus                 True         ()              float64  1.6639087883257717
-WishartProcess.kernel.kernels[2].kernel.kernels[0].variance                  Parameter  Softplus                 False        ()              float64  1.0
-WishartProcess.kernel.kernels[2].kernel.kernels[0].lengthscales              Parameter  Softplus                 True         ()              float64  35.32995319418703
-WishartProcess.kernel.kernels[2].kernel.kernels[1].base_kernel.variance      Parameter  Softplus                 False        ()              float64  1.0
-WishartProcess.kernel.kernels[2].kernel.kernels[1].base_kernel.lengthscales  Parameter  Softplus                 True         ()              float64  2.420564070403604
-WishartProcess.kernel.kernels[2].kernel.kernels[1].period                    Parameter  Softplus                 True         ()              float64  0.7042716848174304
-WishartProcess.likelihood.A                                                  Parameter  Softplus                 True         (3,)            float64  [1.0699428  0.71985721 0.95362572]
-WishartProcess.likelihood.p_sigma2inv_conc                                   Parameter  Softplus                 True         ()              float64  0.10000000000000002
-WishartProcess.likelihood.p_sigma2inv_rate                                   Parameter  Softplus                 True         ()              float64  9.999999999999999e-05
-WishartProcess.likelihood.q_sigma2inv_conc                                   Parameter  Softplus                 True         (3,)            float64  [13.79646064 12.73644412 12.81594463]
-WishartProcess.likelihood.q_sigma2inv_rate                                   Parameter  Softplus                 True         (3,)            float64  [11.86361982  7.10422635  9.43906134]
-WishartProcess.inducing_variable.inducing_variable.Z                         Parameter  Identity                 True         (100, 3)        float64  [[0.1986575, 0.1986575, 0.1986575...
-WishartProcess.q_mu                                                          Parameter  Identity                 True         (100, 15)       float64  [[7.93355470e-01, 1.99979218e-02, -1.16292292e-02...
-WishartProcess.q_sqrt                                                        Parameter  FillTriangular           True         (15, 100, 100)  float64  [[[2.89693387e-01, 0.00000000e+00, 0.00000000e+00...
+name                                             class             transform         prior    trainable    shape          dtype    value
+-----------------------------------------------  ----------------  ----------------  -------  -----------  -------------  -------  ----------------------------------------------------
+SVGP.kernel.kernels[0].base_kernel.variance      Parameter         Softplus                   True         ()             float64  0.8030939431873226
+SVGP.kernel.kernels[0].base_kernel.lengthscales  Parameter         Softplus                   True         ()             float64  2.251657103235551
+SVGP.kernel.kernels[0].period                    Parameter         Softplus                   True         ()             float64  1.9130577810308174
+SVGP.kernel.kernels[1].W                         Parameter         Identity                   True         (3, 2)         float64  [[-0.57301107, -0.57301107...
+SVGP.kernel.kernels[1].kappa                     Parameter         Softplus                   True         (3,)           float64  [1.38164283e+00 3.90517717e-04 1.09640301e+00]
+SVGP.likelihood.likelihoods[0].variance          Parameter         Softplus + Shift           True         ()             float64  2.6286444694864155
+SVGP.likelihood.likelihoods[1].variance          Parameter         Softplus + Shift           True         ()             float64  2.6953655488877617
+SVGP.likelihood.likelihoods[2].variance          Parameter         Softplus + Shift           True         ()             float64  2.7842988941418736
+SVGP.inducing_variable.Z                         ResourceVariable                             True         (276, 2)       float64  [[-0.05825898, 0....
+SVGP.q_mu                                        Parameter         Identity                   False        (276, 1)       float64  [[1.33344062e+00...
+SVGP.q_sqrt                                      Parameter         FillTriangular             False        (1, 276, 276)  float64  [[[1.02446838e-01, 0.00000000e+00, 0.00000000e+00...

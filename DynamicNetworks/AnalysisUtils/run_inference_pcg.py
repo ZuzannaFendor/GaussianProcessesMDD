@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import TimeSeriesSplit
 
 
+
 def run_BANNER(data, T, mnu = "shared", l_scale =1., iterations=5000, num_inducing=None, learning_rate=0.01, batch_size=25):
     """
     :param data: Tuple (X, Y) of input and responses.
@@ -82,7 +83,7 @@ def run_BANNER(data, T, mnu = "shared", l_scale =1., iterations=5000, num_induci
     elbo = run_adam(wishart_process, data, ci_niter(iterations), learning_rate, batch_size, natgrads=False, pb=True)
     return {'wishart process': wishart_process, 'ELBO': elbo}
 
-def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
+def run_MOGP(data, iterations=5000, window_size = None , stride = 0, isvar=False):
     '''
 
     :param data: data: Tuple (X, Y) of input and responses.
@@ -97,7 +98,7 @@ def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
     # create the sliding window models
     if window_size is None:
         window_size = N
-    models = __sliding_window(X, Y, D, window_size =window_size , stride=stride)
+    models = __sliding_window(X, Y, D, window_size =window_size , stride=stride, isvar = isvar)
     #train the models
     for m in models:
         gpflow.optimizers.Scipy().minimize(
@@ -105,18 +106,18 @@ def run_MOGP(data, iterations=5000, window_size = None , stride = 0):
         )
     return models
 
-def run_svgpMOGP(data,  iterations=5000, inducing_ratio=0.4, batch_size=100, window_size = None , stride = 0):
+def run_svgpMOGP(data,  iterations=5000, inducing_ratio=0.4, batch_size=100, lscales = 1.0, window_size = None , stride = 0):
     X,Y = data
     N,D = Y.shape
     Tmax = np.max(X)
     Tmin = np.min(X)
     augX, augY = format_data(X, Y)
     Naug = augX.shape[0]
-    rank = 1  # Rank of W
+    rank = 2 # Rank of W
 
     #kernel
-    k = gpflow.kernels.Matern32(active_dims=[0])
-
+    se = gpflow.kernels.SquaredExponential(variance = 1.0, lengthscales=lscales,active_dims=[0])
+    k = gpflow.kernels.Periodic(base_kernel=se, period=2)
     # Coregion kernel
     coreg = gpflow.kernels.Coregion(output_dim=D, rank=rank, active_dims=[1])
 
@@ -128,6 +129,7 @@ def run_svgpMOGP(data,  iterations=5000, inducing_ratio=0.4, batch_size=100, win
 
     Z, _ = format_data(np.linspace(Tmin, Tmax, M), np.ones((M, D)))
     Z = np.array(Z)
+    Z = tf.Variable(Z)
     lik = gpflow.likelihoods.SwitchedLikelihood(
         [gpflow.likelihoods.Gaussian() for i in range(D)]
     )
@@ -136,9 +138,9 @@ def run_svgpMOGP(data,  iterations=5000, inducing_ratio=0.4, batch_size=100, win
 
     # train models
     # fit the covariance function parameters
-    gpflow.set_trainable(m.inducing_variable, False)
+    # gpflow.set_trainable(m.inducing_variable, False)
 
-    elbo = run_adam(m, (augX, augY), iterations=iterations, learning_rate=0.1, minibatch_size=20,
+    elbo = run_adam(m, (augX, augY), iterations=iterations, learning_rate=0.01, minibatch_size=100,
                                   natgrads=True, pb=True)
     return {'gaussian process': m, 'ELBO': elbo}
 
@@ -229,7 +231,7 @@ def run_example(data, lower=-8., upper=8.):
     plot_model(m, lower, upper)
 
 
-def __sliding_window(X, Y, D, window_size, stride):
+def __sliding_window(X, Y, D, window_size, stride, isvar):
     '''
     X: augmented X with (N*D)x2 where N is the number of samples, D is the dimnsionality and 2 are the "value" and
     "dimension label" columns
@@ -257,10 +259,14 @@ def __sliding_window(X, Y, D, window_size, stride):
         if i + window_size < nr_datapoints:
             # format the data to include the coregionalization label
             x_window,y_window = format_data(X[i:i + window_size], Y[i:i + window_size])
+            if isvar:
+                x_window, y_window = tf.Variable(x_window, trainable=False),tf.Variable(y_window, trainable=False)
             model_windows.append(
                 gpflow.models.VGP((x_window,y_window), kernel=kern, likelihood=lik))
         else:
             x_window,y_window = format_data(X[i:-1], Y[i:-1])
+            if isvar:
+                x_window, y_window = tf.Variable(x_window, trainable=False),tf.Variable(y_window, trainable=False)
             model_windows.append(gpflow.models.VGP((x_window,y_window), kernel=kern, likelihood=lik))
     return model_windows
 

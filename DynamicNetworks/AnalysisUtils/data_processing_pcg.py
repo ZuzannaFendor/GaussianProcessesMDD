@@ -27,6 +27,7 @@ def import_ESMdata():
     data["mood_anxious"] = data["mood_anxious"] + 4
     data = __categorize_vars(data)
     data.dropna()
+    data  = rescale_to_zero_mean(data)
     return data, data.columns.values.tolist(), scl_data
 
 
@@ -38,7 +39,13 @@ def __categorize_vars(data):
     data["sus"] = data["mood_suspic"]
     return data
 
-
+def rescale_to_zero_mean(data):
+    data["neg_affect"] = data["neg_affect"]-4
+    data["pos_affect"] = data["pos_affect"]-4
+    data["mental_unrest"] = data["mental_unrest"]-4
+    data["worry"] = data["worry"]-4
+    data["sus"] = data["sus"]-4
+    return data
 def extract_scl(data):
     scl_indeces = [2, 3, 4] + [i for i in range(data.columns.get_loc("SCL.90.R.29"), (data.columns.get_loc("dep") + 1))]
     scl_data = data.iloc[:, scl_indeces]

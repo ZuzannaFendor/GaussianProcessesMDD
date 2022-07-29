@@ -38,7 +38,7 @@ loglik_mogp_list = np.zeros((n_sim, N_test))
 num_iter = 65000
 batch_size = 100
 indu_rate = 0.2
-windsize = 50#nr of samples in each window
+windsize = N #nr of samples in each window
 for i in range(n_sim):
     #create dataset
     print(f"dataset {i} of the type {sim_type}")
@@ -55,19 +55,30 @@ for i in range(n_sim):
         y = Y[:t]
         ytest = Y[t:t+5]
         xtest = X[t:t+5]
-        mogp_models = runpcg.run_MOGP((x, y), iterations=num_iter, window_size=(N - N_test + t), stride=0)
+        # mogp_models = runpcg.run_MOGP((x, y), iterations=num_iter, window_size=(N - N_test + t), stride=0)
+        # mogp_models = runpcg.run_svgpMOGP((x,y),num_iter,inducing_ratio = 0.30)
+        if t == N-N_test:
+            mogp = mogp_models = runpcg.run_svgpMOGP((x,y),num_iter,inducing_ratio = 0.20,batch_size=100)
+            mogp_models= [mogp['gaussian process']]
+        else:
+            augX, augY = runpcg.format_data(x,y)
+            datagwp = (augX, augY)
+            elbo = training_util.run_adam(mogp_models[0],datagwp,iterations=5000,minibatch_size=batch_size)
         # if t == N-N_test:
-        # mogp_models = runpcg.run_MOGP((x,y), iterations=num_iter, window_size = windsize, stride = 0)
+        #     mogp_models = runpcg.run_MOGP((x,y), iterations=1, window_size = windsize, stride = 0, isvar=False)
         # else:
-        #     kern = mogp_model.kernel
-        #     lik = mogp_model.likelihood
-        #     mogp_model = gpflow.models.VGP((x, y), kernel=kern, likelihood=lik)
-        #     gpflow.optimizers.Scipy().minimize(
-        #         mogp_model.training_loss, mogp_model.trainable_variables, options=dict(maxiter=num_iter), method="L-BFGS-B",
-        #     )
+        #     xform, yform = runpcg.format_data(x, y)
+        #     data = (tf.Variable(xform,trainable=False),tf.Variable(yform,trainable=False))
+        #     mogp_models = [gpflow.models.vgp.update_vgp_data(m, data) for m in mogp_models]
+        # #     kern = mogp_model.kernel
+        # #     lik = mogp_model.likelihood
+        # #     mogp_model = gpflow.models.VGP((x, y), kernel=kern, likelihood=lik)
+        #     for m in mogp_models:
+        #         gpflow.optimizers.Scipy().minimize(
+        #         m.training_loss, m.trainable_variables, options=dict(maxiter=5000), method="L-BFGS-B",
+        #         )
         aug_test_X, aug_test_Y = datapcg.stackify_data(xtest, ytest)
         cov = mogp_models[-1].kernel.kernels[-1].output_covariance()
-        print(cov)
         mogp_cov_pred[i, :, it * 5:it * 5 + 5]   = cov
         mogp_y_pred[i, :, it * 5:it * 5 + 5] = np.reshape(mogp_models[-1].predict_f_samples(np.array(aug_test_X), S), (S, 5, D))
         rr = np.sum(
@@ -91,21 +102,21 @@ for i in range(n_sim):
     ymse_mogp_list[i] = metrics.MSE(data[-N_test:], mogp_y_pred[i])
 
     #save covariance plot
-    plot_pcg.plot_cov_comparison(X, Sigmas, mogp_sigma_list[i], D, "MOGP", pred = mogp_cov_pred[i], save=f"MOGP_simulation/MOGP{sim_type}{i}", lim=(-4, 6))
+    plot_pcg.plot_cov_comparison(X, Sigmas, mogp_sigma_list[i], D, "MOGP", pred = mogp_cov_pred[i], save=f"MOGP_simulation2/MOGP{sim_type}{i}", lim=(-4, 6))
 
-plot_pcg.plot_cov_comparison(X, Sigmas, np.reshape(mogp_sigma_list, (n_sim * S, N, D, D)), D, "MOGP", pred = np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)), save=f"MOGP_simulation/mogp{sim_type} average", lim = (-4, 6.5))
+plot_pcg.plot_cov_comparison(X, Sigmas, np.reshape(mogp_sigma_list, (n_sim * S, N, D, D)), D, "MOGP", pred = np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)), save=f"MOGP_simulation2/mogp{sim_type} average", lim = (-4, 6.5))
 
 #save metrics for cov-cov
-np.save(f"MOGP_simulation/sigmas_{sim_type}", mogp_sigma_list)
-np.save(f"MOGP_simulation/mus_{sim_type}", mogp_mu_pred)
-np.save(f"MOGP_simulation/ysamples_{sim_type}", mogp_y_pred)
+np.save(f"MOGP_simulation2/sigmas_{sim_type}", mogp_sigma_list)
+np.save(f"MOGP_simulation2/mus_{sim_type}", mogp_mu_pred)
+np.save(f"MOGP_simulation2/ysamples_{sim_type}", mogp_y_pred)
 
 # sigma prediciton mean squared error
 mse_gwp = metrics.MSE(Sigmas[-N_test:], np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)))
-np.save(f"MOGP_simulation/mse_simulation_{sim_type}_cov", mse_gwp)
+np.save(f"MOGP_simulation2/mse_simulation_{sim_type}_cov", mse_gwp)
 
 #save metrics for y-y
-np.save(f"MOGP_simulation/ymse_simulation_{sim_type}_cov", ymse_mogp_list)
+np.save(f"MOGP_simulation2/ymse_simulation_{sim_type}_cov", ymse_mogp_list)
 
 correlations_loglik = np.ones((n_sim, S))
 mse_resh =np.reshape(mogp_cov_pred, (n_sim , S, N_test, D, D))
@@ -120,7 +131,7 @@ plt.hist(correlations_loglik, bins =20)
 plt.title("Correlation between Sigma MSE and the log-likelihood")
 plt.xlabel("correlation")
 plt.ylabel("count")
-plt.savefig(f"MOGP_simulation/{sim_type}likelihoodcorr")
+plt.savefig(f"MOGP_simulation2/{sim_type}likelihoodcorr")
 plt.close()
 #sigma prediction for the test data
 #averaged over the output dimensions
@@ -142,14 +153,14 @@ plt.hist(c, bins =20)
 plt.title("Correlation between Sigma MSE and Y MSE")
 plt.xlabel("correlation")
 plt.ylabel("count")
-plt.savefig(f"MOGP_simulation/{sim_type}msecorr")
+plt.savefig(f"MOGP_simulation2/{sim_type}msecorr")
 plt.close()
 #plot the distribution of the correlations
 #per dimension
 c = np.reshape(correlations, (n_sim * S, D))
 for d in range(D):
     plt.hist(c[:,d], bins =20)
-    plt.title(f"MOGP_simulation/Correlation histogram of dimension {d}")
+    plt.title(f"MOGP_simulation2/Correlation histogram of dimension {d}")
     plt.show()
 plt.close()
 
@@ -229,7 +240,7 @@ loglik_mogp_list = np.zeros((n_sim, N_test))
 num_iter = 65000
 batch_size = 100
 indu_rate = 0.2
-windsize = 50#nr of samples in each window
+windsize = N#nr of samples in each window
 for i in range(n_sim):
     print(f"dataset {i} of the type {sim_type}")
     #create dataset
@@ -246,8 +257,13 @@ for i in range(n_sim):
         y = Y[:t]
         ytest = Y[t:t+5]
         xtest = X[t:t+5]
-        # if t == N-N_test:
-        mogp_models = runpcg.run_MOGP((x,y), iterations=num_iter, window_size = windsize, stride = 0)
+        if t == N-N_test:
+            mogp = mogp_models = runpcg.run_svgpMOGP((x,y),num_iter,inducing_ratio = 0.20,batch_size=100)
+            mogp_models= [mogp['gaussian process']]
+        else:
+            augX, augY = runpcg.format_data(x,y)
+            datagwp = (augX, augY)
+            elbo = training_util.run_adam(mogp_models[0],datagwp,iterations=5000,minibatch_size=batch_size)
         # else:
         #     kern = mogp_model.kernel
         #     lik = mogp_model.likelihood
@@ -280,21 +296,21 @@ for i in range(n_sim):
     ymse_mogp_list[i] = metrics.MSE(data[-N_test:], mogp_y_pred[i])
 
     #save covariance plot
-    plot_pcg.plot_cov_comparison(X, Sigmas, mogp_sigma_list[i], D, "MOGP", pred = mogp_cov_pred[i], save=f"MOGP_simulation/MOGP{sim_type}{i}", lim=(-4, 6))
+    plot_pcg.plot_cov_comparison(X, Sigmas, mogp_sigma_list[i], D, "MOGP", pred = mogp_cov_pred[i], save=f"MOGP_simulation2/MOGP{sim_type}{i}", lim=(-4, 6))
 
-plot_pcg.plot_cov_comparison(X, Sigmas, np.reshape(mogp_sigma_list, (n_sim * S, N, D, D)), D, "MOGP", pred = np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)), save=f"MOGP_simulation/mogp{sim_type} average", lim = (-4, 6.5))
+plot_pcg.plot_cov_comparison(X, Sigmas, np.reshape(mogp_sigma_list, (n_sim * S, N, D, D)), D, "MOGP", pred = np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)), save=f"MOGP_simulation2/mogp{sim_type} average", lim = (-4, 6.5))
 
 #save metrics for cov-cov
-np.save(f"MOGP_simulation/sigmas_{sim_type}", mogp_sigma_list)
-np.save(f"MOGP_simulation/mus_{sim_type}", mogp_mu_pred)
-np.save(f"MOGP_simulation/ysamples_{sim_type}", mogp_y_pred)
+np.save(f"MOGP_simulation2/sigmas_{sim_type}", mogp_sigma_list)
+np.save(f"MOGP_simulation2/mus_{sim_type}", mogp_mu_pred)
+np.save(f"MOGP_simulation2/ysamples_{sim_type}", mogp_y_pred)
 
 # sigma prediciton mean squared error
 mse_gwp = metrics.MSE(Sigmas[-N_test:], np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)))
-np.save(f"MOGP_simulation/mse_simulation_{sim_type}_cov", mse_gwp)
+np.save(f"MOGP_simulation2/mse_simulation_{sim_type}_cov", mse_gwp)
 
 #save metrics for y-y
-np.save(f"MOGP_simulation/ymse_simulation_{sim_type}_cov", ymse_mogp_list)
+np.save(f"MOGP_simulation2/ymse_simulation_{sim_type}_cov", ymse_mogp_list)
 
 correlations_loglik = np.ones((n_sim, S))
 mse_resh =np.reshape(mogp_cov_pred, (n_sim , S, N_test, D, D))
@@ -309,7 +325,7 @@ plt.hist(correlations_loglik, bins =20)
 plt.title("Correlation between Sigma MSE and the log-likelihood")
 plt.xlabel("correlation")
 plt.ylabel("count")
-plt.savefig(f"MOGP_simulation/{sim_type}likelihoodcorr")
+plt.savefig(f"MOGP_simulation2/{sim_type}likelihoodcorr")
 plt.close()
 #sigma prediction for the test data
 #averaged over the output dimensions
@@ -331,14 +347,14 @@ plt.hist(c, bins =20)
 plt.title("Correlation between Sigma MSE and Y MSE")
 plt.xlabel("correlation")
 plt.ylabel("count")
-plt.savefig(f"MOGP_simulation/{sim_type}msecorr")
+plt.savefig(f"MOGP_simulation2/{sim_type}msecorr")
 plt.close()
 #plot the distribution of the correlations
 #per dimension
 c = np.reshape(correlations, (n_sim * S, D))
 for d in range(D):
     plt.hist(c[:,d], bins =20)
-    plt.title(f"MOGP_simulation/Correlation histogram of dimension {d}")
+    plt.title(f"MOGP_simulation2/Correlation histogram of dimension {d}")
     plt.show()
 plt.close()
 
@@ -416,7 +432,7 @@ loglik_mogp_list = np.zeros((n_sim, N_test))
 num_iter = 65000
 batch_size = 100
 indu_rate = 0.2
-windsize = 50#nr of samples in each window
+windsize = N#nr of samples in each window
 for i in range(n_sim):
     print(f"dataset {i} of the type {sim_type}")
     #create dataset
@@ -434,7 +450,14 @@ for i in range(n_sim):
         ytest = Y[t:t+5]
         xtest = X[t:t+5]
         # if t == N-N_test:
-        mogp_models = runpcg.run_MOGP((x,y), iterations=num_iter, window_size = windsize, stride = 0)
+        if t == N-N_test:
+            mogp = mogp_models = runpcg.run_svgpMOGP((x,y),num_iter,inducing_ratio = 0.20,batch_size=100)
+            mogp_models= [mogp['gaussian process']]
+        else:
+            augX, augY = runpcg.format_data(x,y)
+            datagwp = (augX, augY)
+            elbo = training_util.run_adam(mogp_models[0],datagwp,iterations=5000,minibatch_size=batch_size)
+        # mogp_models = runpcg.run_MOGP((x,y), iterations=num_iter, window_size = windsize, stride = 0)
         # else:
         #     kern = mogp_model.kernel
         #     lik = mogp_model.likelihood
@@ -467,21 +490,21 @@ for i in range(n_sim):
     ymse_mogp_list[i] = metrics.MSE(data[-N_test:], mogp_y_pred[i])
 
     #save covariance plot
-    plot_pcg.plot_cov_comparison(X, Sigmas, mogp_sigma_list[i], D, "MOGP", pred = mogp_cov_pred[i], save=f"MOGP_simulation/MOGP{sim_type}{i}", lim=(-4, 6))
+    plot_pcg.plot_cov_comparison(X, Sigmas, mogp_sigma_list[i], D, "MOGP", pred = mogp_cov_pred[i], save=f"MOGP_simulation2/MOGP{sim_type}{i}", lim=(-4, 6))
 
-plot_pcg.plot_cov_comparison(X, Sigmas, np.reshape(mogp_sigma_list, (n_sim * S, N, D, D)), D, "MOGP", pred = np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)), save=f"MOGP_simulation/mogp{sim_type} average", lim = (-4, 6.5))
+plot_pcg.plot_cov_comparison(X, Sigmas, np.reshape(mogp_sigma_list, (n_sim * S, N, D, D)), D, "MOGP", pred = np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)), save=f"MOGP_simulation2/mogp{sim_type} average", lim = (-4, 6.5))
 
 #save metrics for cov-cov
-np.save(f"MOGP_simulation/sigmas_{sim_type}", mogp_sigma_list)
-np.save(f"MOGP_simulation/mus_{sim_type}", mogp_mu_pred)
-np.save(f"MOGP_simulation/ysamples_{sim_type}", mogp_y_pred)
+np.save(f"MOGP_simulation2/sigmas_{sim_type}", mogp_sigma_list)
+np.save(f"MOGP_simulation2/mus_{sim_type}", mogp_mu_pred)
+np.save(f"MOGP_simulation2/ysamples_{sim_type}", mogp_y_pred)
 
 # sigma prediciton mean squared error
 mse_gwp = metrics.MSE(Sigmas[-N_test:], np.reshape(mogp_cov_pred, (n_sim * S, N_test, D, D)))
-np.save(f"MOGP_simulation/mse_simulation_{sim_type}_cov", mse_gwp)
+np.save(f"MOGP_simulation2/mse_simulation_{sim_type}_cov", mse_gwp)
 
 #save metrics for y-y
-np.save(f"MOGP_simulation/ymse_simulation_{sim_type}_cov", ymse_mogp_list)
+np.save(f"MOGP_simulation2/ymse_simulation_{sim_type}_cov", ymse_mogp_list)
 
 correlations_loglik = np.ones((n_sim, S))
 mse_resh =np.reshape(mogp_cov_pred, (n_sim , S, N_test, D, D))
@@ -496,7 +519,7 @@ plt.hist(correlations_loglik, bins =20)
 plt.title("Correlation between Sigma MSE and the log-likelihood")
 plt.xlabel("correlation")
 plt.ylabel("count")
-plt.savefig(f"MOGP_simulation/{sim_type}likelihoodcorr")
+plt.savefig(f"MOGP_simulation2/{sim_type}likelihoodcorr")
 plt.close()
 #sigma prediction for the test data
 #averaged over the output dimensions
@@ -518,14 +541,14 @@ plt.hist(c, bins =20)
 plt.title("Correlation between Sigma MSE and Y MSE")
 plt.xlabel("correlation")
 plt.ylabel("count")
-plt.savefig(f"MOGP_simulation/{sim_type}msecorr")
+plt.savefig(f"MOGP_simulation2/{sim_type}msecorr")
 plt.close()
 #plot the distribution of the correlations
 #per dimension
 c = np.reshape(correlations, (n_sim * S, D))
 for d in range(D):
     plt.hist(c[:,d], bins =20)
-    plt.title(f"MOGP_simulation/Correlation histogram of dimension {d}")
+    plt.title(f"MOGP_simulation2/Correlation histogram of dimension {d}")
     plt.show()
 plt.close()
 
@@ -577,3 +600,5 @@ print("average mse sigma with sigma pred:", np.mean(mse_gwp))
 
 print("mean correlation log likelihood and mse sigma",np.mean(correlations_loglik))
 print("mean sigma mse vs y mse corr", np.mean(correlations))
+
+
